@@ -1,0 +1,48 @@
+# Workspace root: one environment and one lock for every package in packages/,
+# plus the tutorials and notebooks. Not a package itself.
+[project]
+name = "astroinfer-workspace"
+version = "0"
+requires-python = ">=3.12"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "astroinfer[marimo]",
+    "astroinfer-tgmm[plot]",
+    "astroinfer-gwmockcat",
+    "marimo>=0.25.2",
+    "matplotlib",
+    "scipy",
+    "pytest>=8",
+    "ruff",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.uv.sources]
+# Packages in this repository (installed editable).
+astroinfer = { workspace = true }
+astroinfer-tgmm = { workspace = true }
+astroinfer-gwmockcat = { workspace = true }
+# Dependencies installed from git. These sources apply only inside this workspace;
+# see README "Installing" for what that means for users.
+gravpop = { git = "https://git.ligo.org/asad.hussain/gravpop", rev = "simplify-composite" }
+truncatedgaussianmixtures = { git = "https://github.com/Potatoasad/truncatedgaussianmixtures", rev = "jax-backend" }
+plot-helper = { git = "https://github.com/Potatoasad/plot_helper" }
+
+[tool.pytest.ini_options]
+testpaths = [
+    "packages/astroinfer/tests",
+    "packages/astroinfer-tgmm/tests",
+    "packages/astroinfer-gwmockcat/tests",
+]
+addopts = ["--import-mode=importlib"]
+markers = ["julia: needs Julia and fits TGMMs (slow on first run)"]
+
+[tool.marimo.runtime]
+output_max_bytes = 10_000_000

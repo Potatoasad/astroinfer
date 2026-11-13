@@ -1,0 +1,63 @@
+"""astroinfer: typed forward models and hierarchical inference in JAX.
+
+Layout (each layer only imports the ones above it):
+
+    display       HTML / LaTeX rendering for notebooks (RichDisplay)
+    parameters    @parameter_dataclass: batched JAX pytrees for theta and d
+    latent        LatentSpace: per-field bijections to the real line
+    posterior     PosteriorData: posterior draws + sample stats + metadata
+    generative    differentiable population models p(theta | Lambda)
+    inference     likelihoods and gravpop-backed PE / population sampling
+    measurement   MeasurementProcess: the measurement model K(d | theta)
+    representations  Fit/Fitter protocol, registry, the built-in raw representation
+    catalog       Catalog of per-event posteriors and their representations
+    detection     detection triggers P(detected | d) and injection tables
+"""
+from . import detection, generative, representations
+from .catalog import Catalog
+from .display import RichDisplay
+from .latent import LatentSpace
+from .inference import (
+    FixedDataLikelihood,
+    PopulationLikelihood,
+    parameter_estimation,
+    population_inference,
+    run_sampler,
+)
+from .measurement import MeasurementProcess, Proposal
+from .parameters import (
+    Parameters,
+    ParameterSpec,
+    batched_method,
+    coerce,
+    parameter,
+    parameter_dataclass,
+)
+from .posterior import PosteriorData
+from .representations import RawFit, RawSamples, register
+
+__all__ = [
+    "Catalog",
+    "FixedDataLikelihood",
+    "LatentSpace",
+    "MeasurementProcess",
+    "ParameterSpec",
+    "Parameters",
+    "PopulationLikelihood",
+    "PosteriorData",
+    "Proposal",
+    "RawFit",
+    "RawSamples",
+    "RichDisplay",
+    "batched_method",
+    "coerce",
+    "detection",
+    "generative",
+    "parameter",
+    "parameter_dataclass",
+    "parameter_estimation",
+    "register",
+    "representations",
+    "population_inference",
+    "run_sampler",
+]

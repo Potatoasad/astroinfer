@@ -1,0 +1,22 @@
+[project]
+name = "astroinfer-tgmm"
+version = "0.1.0"
+description = "Truncated Gaussian mixture (TGMM) representations for astroinfer catalogs"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "astroinfer",
+    "pandas>=3.1.1",
+    "truncatedgaussianmixtures",
+]
+
+[project.optional-dependencies]
+plot = ["plot-helper", "matplotlib"]
+
+# Catalog.load finds the "tgmm" representation kind through this entry point.
+[project.entry-points."astroinfer.representations"]
+tgmm = "astroinfer_tgmm:TGMMFitter"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

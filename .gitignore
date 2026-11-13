@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# marimo session caches
+__marimo__/
+
+# Data written by the tutorials and notebooks (regenerated on run)
+tutorials/data/
+notebooks/gw/data/
+notebooks/data/
+
+# OS
+.DS_Store

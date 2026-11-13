@@ -1,0 +1,26 @@
+[project]
+name = "astroinfer"
+version = "0.1.0"
+description = "Typed forward models and hierarchical inference in JAX"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "gravpop",
+    "h5py>=3.10",
+    "jax>=0.12.0.1",
+    "numpy>=2.5.4",
+    "numpyro",
+    "pandas>=3.1.1",
+]
+
+[project.optional-dependencies]
+# Only needed to render LaTeX through marimo inside marimo notebooks;
+# Jupyter display works without it.
+marimo = ["marimo>=0.25.2"]
+# Convenience extras for the extension packages in this repository.
+tgmm = ["astroinfer-tgmm"]
+gwmockcat = ["astroinfer-gwmockcat"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
