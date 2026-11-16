@@ -23,7 +23,7 @@ site:
 Define a physical system and its measurement process once, then use the same model to simulate
 observations, estimate individual parameters, and model and infer population distributions.
 
-{button}`Get started <getting-started.md>` {button}`Examples <examples/index.md>` {button}`Installation <installation.md>`
+{button}`Get started <getting-started.md>` {button}`Examples <examples.md>` {button}`Installation <installation.md>`
 
 Imagine an experiment in which you flip a coin 50 times and write down the whole list of heads
 and tails as your data. Here is how you would implement it:
@@ -186,7 +186,7 @@ The coin flip example step by step, with outputs.
 :::
 
 :::{card} Examples
-:link: examples/index.md
+:link: examples.md
 Nine worked problems, from a coin flip to selection effects and custom catalog
 representations.
 :::

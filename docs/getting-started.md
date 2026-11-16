@@ -160,6 +160,6 @@ batch of `Coin` objects together with the observed data. It is described in
 
 The [quickstart](quickstart.md) uses a model with two parameters to go on from here to
 populations of objects and catalogs of posteriors, and [Installation](installation.md) shows how
-to install astroinfer and its extensions. The [examples](examples/index.md) work
+to install astroinfer and its extensions. The [examples](examples.md) work
 through nine problems in more depth, starting with this coin, and
 [Why astroinfer?](why-astroinfer.md) describes what the library takes care of.

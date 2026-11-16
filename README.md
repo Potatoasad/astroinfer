@@ -4,12 +4,17 @@
     <img src="assets/astroinfer-logo.svg" alt="astroinfer" width="320">
   </picture>
 </h1>
+
+[![Docs](https://img.shields.io/badge/docs-website-418FC5)](https://potatoasad.github.io/astroinfer/)
+[![CI](https://github.com/Potatoasad/astroinfer/actions/workflows/ci.yml/badge.svg)](https://github.com/Potatoasad/astroinfer/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/python-3.12%2B-17243D)](https://github.com/Potatoasad/astroinfer/blob/main/pyproject.toml)
+
 **astroinfer** is a JAX-based framework for astrophysical simulation and Bayesian inference.
 Define a physical system and its measurement process once, then use the same model to simulate
 observations, estimate individual parameters, and model and infer population distributions.
 
-[Documentation](docs/index.md) | [Getting started](docs/getting-started.md) |
-[Quickstart](docs/quickstart.md) | [Installation](docs/installation.md) | [Examples](tutorials)
+[Documentation](https://potatoasad.github.io/astroinfer/) | [Getting started](https://potatoasad.github.io/astroinfer/getting-started/) |
+[Quickstart](https://potatoasad.github.io/astroinfer/quickstart/) | [Installation](https://potatoasad.github.io/astroinfer/installation/) | [Examples](https://potatoasad.github.io/astroinfer/examples/)
 
 ## Example
 
@@ -104,12 +109,12 @@ term when only some objects are detected. The posteriors of single objects can b
 
 ## Where to go next
 
-- [Getting started](docs/getting-started.md): the coin flip example step by step, with outputs.
-- [Examples](tutorials): nine worked problems, from a coin flip to selection effects and custom
+- [Getting started](https://potatoasad.github.io/astroinfer/getting-started/): the coin flip example step by step, with outputs.
+- [Examples](https://potatoasad.github.io/astroinfer/examples/): nine worked problems, from a coin flip to selection effects and custom
   catalog representations.
-- [User guide](docs/user-guide/terminology.md): parameter types, measurement processes,
+- [User guide](https://potatoasad.github.io/astroinfer/terminology/): parameter types, measurement processes,
   population models, population inference and catalogs, one page each.
-- [API reference](docs/api.md): every public class and function.
+- [API reference](https://potatoasad.github.io/astroinfer/api/): every public class and function.
 
 ## Installation
 
@@ -120,7 +125,7 @@ uv add "astroinfer @ git+https://github.com/Potatoasad/astroinfer#subdirectory=p
 ```
 
 Some dependencies are only available from git and have to be listed in your project's
-`[tool.uv.sources]`. See [Installation](docs/installation.md).
+`[tool.uv.sources]`. See [Installation](https://potatoasad.github.io/astroinfer/installation/).
 
 ## What is in this repository
 

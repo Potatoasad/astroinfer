@@ -20,7 +20,7 @@ project:
         - file: quickstart.md
         - file: installation.md
         - file: why-astroinfer.md
-    - file: examples/index.md
+    - file: examples.md
       children:
         - file: examples/01_coin_flips.ipynb
         - file: examples/02_lighthouse.ipynb
