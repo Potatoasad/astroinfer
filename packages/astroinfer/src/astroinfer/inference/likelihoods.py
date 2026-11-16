@@ -10,12 +10,11 @@ importance sampling instead:
                                 / q_Lambda(theta_ij | d_i),
     theta_ij ~ q_Lambda(. | d_i)
 """
-from dataclasses import fields
-
 import jax
 import jax.numpy as jnp
 
 from ..parameters import coerce
+from ..population import as_population_model
 
 
 class FixedDataLikelihood:
@@ -34,10 +33,14 @@ class PopulationLikelihood:
     Population-marginalized likelihood for independent observations.
 
     L(d | theta) is provided by MeasurementProcess.
-    p(theta | Lambda) is provided by GenerativeModel.
+    p(theta | Lambda) is provided by a PopulationModel. A GenerativeModel
+    is wrapped with PopulationModel.from_generative (using
+    ``conditioned_on`` for its external variables). ``self.pop_model`` is
+    the object passed in; ``self.population`` is the PopulationModel used.
 
-    Uses fixed base random numbers for differentiable
-    common-random-number Monte Carlo integration.
+    Uses a fixed key for differentiable common-random-number Monte Carlo
+    integration: draws from p (or from the proposal) are the same function
+    of Lambda on every call.
 
     proposal:
         Optional Proposal q_Lambda(theta | d). If given, draws come from q
@@ -96,64 +99,38 @@ class PopulationLikelihood:
             raise ValueError("No observations provided")
 
         self.conditioned_on = dict(conditioned_on or {})
-
-        if not pop_model.order:
-            raise ValueError(
-                "Population model must draw at least one variable"
-            )
-
-        # Check that the generative model supplies all the
-        # physical fields expected by MeasurementProcess.
-        required = {
-            f.name
-            for f in fields(measurement.parameter_type)
-        }
-
-        available = (
-            set(pop_model.order)
-            | set(self.conditioned_on)
+        # pop_model stays as given (subclasses may call its own methods);
+        # population is the PopulationModel interface the likelihood uses.
+        self.population = as_population_model(
+            pop_model, measurement.parameter_type, self.conditioned_on
         )
 
-        missing = required - available
+        if self.population.parameter_type is not measurement.parameter_type:
+            raise TypeError(
+                "pop_model.parameter_type must be the measurement's "
+                f"parameter_type ({measurement.parameter_type.__name__}), "
+                f"got {getattr(self.population.parameter_type, '__name__', None)}."
+            )
 
-        if missing:
+        if proposal is None and not self.population.differentiable_sample:
             raise ValueError(
-                "Population model is missing "
-                f"parameters {sorted(missing)}"
+                f"{type(self.population).__name__} does not draw samples "
+                "that are differentiable in Lambda "
+                "(differentiable_sample = False), so it needs a proposal."
             )
 
-        # ------------------------------------------------
-        # Fixed random numbers: a key for the proposal,
-        # or a uniform bank for drawing from p directly.
-        # ------------------------------------------------
-
-        key = jax.random.key(int(seed))
-
-        if proposal is not None:
-            if (
-                proposal.parameter_type is not measurement.data_type
-                or proposal.data_type is not measurement.parameter_type
-            ):
-                raise TypeError(
-                    "Proposal types must mirror the measurement process: "
-                    "proposal.parameter_type is measurement.data_type and "
-                    "proposal.data_type is measurement.parameter_type."
-                )
-            self.key = key
-
-        keys = jax.random.split(
-            key, len(pop_model.order)
-        )
-
-        self.seeds = None if proposal is not None else {
-            name: jax.random.uniform(
-                k,
-                shape=(self.E, self.N),
-                minval=1e-7,
-                maxval=1.0 - 1e-7,
+        if proposal is not None and (
+            proposal.parameter_type is not measurement.data_type
+            or proposal.data_type is not measurement.parameter_type
+        ):
+            raise TypeError(
+                "Proposal types must mirror the measurement process: "
+                "proposal.parameter_type is measurement.data_type and "
+                "proposal.data_type is measurement.parameter_type."
             )
-            for name, k in zip(pop_model.order, keys)
-        }
+
+        # One fixed key: it drives either the proposal or the population.
+        self.key = jax.random.key(int(seed))
 
         # Add a singleton Monte Carlo axis to observations.
         # Batch shape: (E,) -> (E,1)
@@ -162,15 +139,9 @@ class PopulationLikelihood:
         )
 
     def population_draws(self, Lambda):
-        """theta_ij ~ p(theta | Lambda) from the fixed seed bank, batch (E, N)."""
-        generated = self.pop_model.sample(
-            params=Lambda,
-            seeds=self.seeds,
-            conditioned_on=self.conditioned_on,
-        )
-
-        theta = self.measurement.parameter_type.from_dict(
-            generated
+        """theta_ij ~ p(theta | Lambda) from the fixed key, batch (E, N)."""
+        theta = self.population.sample(
+            Lambda, key=self.key, shape=(self.E, self.N)
         )
 
         if theta.batch_shape != (self.E, self.N):
@@ -210,19 +181,11 @@ class PopulationLikelihood:
         if self.proposal is None:
             return self.log_likelihood_draws(Lambda)
 
-        if self.pop_model.external:
-            raise ValueError(
-                "The default proposal weight needs p(theta | Lambda) for "
-                "every drawn parameter, but pop_model conditions on external "
-                f"variables {sorted(self.pop_model.external)}. Override "
-                "log_weights for this case."
-            )
-
         theta = self.proposal_draws(Lambda)
         log_q = self.proposal.logpdf(
             theta, self._data_for_samples, Lambda=Lambda
         )
-        log_p = self.pop_model.log_prob(theta.to_dict(), Lambda)
+        log_p = self.population.logpdf(theta, Lambda)
         return self.log_likelihood_at(theta) + log_p - log_q
 
     def event_logpdf_and_neff(self, Lambda):

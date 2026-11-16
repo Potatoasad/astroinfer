@@ -150,8 +150,11 @@ def population_inference(
         Typed data object with batch_shape=(E,).
 
     pop_model:
-        GenerativeModel transforming fixed uniform
-        seeds and Lambda into physical parameters.
+        PopulationModel p(theta | Lambda), or a GenerativeModel
+        (wrapped with PopulationModel.from_generative).
+
+    conditioned_on:
+        Values of a GenerativeModel's external variables.
 
     pop_priors:
         gravpop-compatible hyperparameter prior dict.

@@ -7,6 +7,7 @@ Layout (each layer only imports the ones above it):
     latent        LatentSpace: per-field bijections to the real line
     posterior     PosteriorData: posterior draws + sample stats + metadata
     generative    differentiable population models p(theta | Lambda)
+    population    PopulationModel: p(theta | Lambda) from unbatched sample/logpdf
     inference     likelihoods and gravpop-backed PE / population sampling
     measurement   MeasurementProcess: the measurement model L(d | theta)
     representations  Fit/Fitter protocol, registry, the built-in raw representation
@@ -33,6 +34,7 @@ from .parameters import (
     parameter,
     parameter_dataclass,
 )
+from .population import PopulationModel
 from .posterior import PosteriorData
 from .representations import RawFit, RawSamples, register
 
@@ -44,6 +46,7 @@ __all__ = [
     "ParameterSpec",
     "Parameters",
     "PopulationLikelihood",
+    "PopulationModel",
     "PosteriorData",
     "Proposal",
     "RawFit",
