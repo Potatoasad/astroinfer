@@ -28,14 +28,15 @@ with app.setup:
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    # 1 · Is this coin rigged? 🪙
+    # 1. Is this coin rigged?
 
-    Welcome to **astroinfer**. In this series you will build up, one problem at a time, everything
-    you need to write your own forward model and run single-event and population inference on it.
+    This is the first of nine notebooks on astroinfer. By the end of the series you should be able
+    to write a forward model for your own experiment and run both single-event and population
+    inference on it. Each notebook works through one problem:
 
-    | # | problem | you learn |
+    | # | problem | topics |
     |---|---|---|
-    | **1** | **is this coin rigged?** | **parameters, data, and your first `MeasurementProcess`** |
+    | 1 | is this coin rigged? | parameters, data, and a first `MeasurementProcess` |
     | 2 | the lighthouse | batches, core axes, JAX, constrained parameters |
     | 3 | the doctor's office | `PosteriorData`, derived parameters, custom displays |
     | 4 | the coin mint | population models with `astroinfer.generative` |
@@ -45,23 +46,22 @@ def _():
     | 8 | the star catalog | `Catalog`, data products, save / load |
     | 9 | your own representation | the `Fit` / `Fitter` protocol |
 
-    ## The whole idea in one picture
+    ## Parameters, data and the measurement process
 
-    Every analysis in astroinfer is built from three objects you write yourself:
+    An analysis in astroinfer is built from three objects, all of which you write yourself. The
+    *parameters* $\theta$ are what nature knows, the *data* $d$ are what you get to see, and the
+    *measurement process* $\mathcal{L}(d\mid\theta)$ connects the two:
 
     $$
-    \underbrace{\theta}_{\text{what nature knows}}
-    \;\xrightarrow{\quad K(d\mid\theta)\quad}\;
-    \underbrace{d}_{\text{what you get to see}}
+    \theta \;\xrightarrow{\quad \mathcal{L}(d\mid\theta)\quad}\; d
     $$
 
-    * $\theta$, the **parameters**: a `@parameter_dataclass`;
-    * $d$, the **data**: another `@parameter_dataclass`;
-    * $K(d\mid\theta)$, the **measurement process**: a subclass of `MeasurementProcess` that knows how
-      to *simulate* $d$ from $\theta$ and how to *score* $d$ given $\theta$.
+    The parameters and the data are each a `@parameter_dataclass`. The measurement process is a
+    subclass of `MeasurementProcess` and has two jobs: simulate $d$ given $\theta$, and evaluate the
+    probability of $d$ given $\theta$. Once you have these, sampling the posterior
+    $p(\theta\mid d)\propto \mathcal{L}(d\mid\theta)\,\pi(\theta)$ takes one method call.
 
-    Once those exist, parameter estimation $p(\theta\mid d)\propto K(d\mid\theta)\,\pi(\theta)$ is one
-    method call. Let's build all three for the simplest experiment there is.
+    We'll start with the simplest experiment there is, flipping a coin.
     """)
     return
 
@@ -69,12 +69,13 @@ def _():
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## Step 1 · Describe the parameters $\theta$
+    ## The parameters
 
-    A coin has one parameter: the probability $p$ that it lands heads. A `@parameter_dataclass` is a
-    frozen dataclass (and a JAX pytree, more on that in notebook 2). Each field is declared with
-    `parameter(...)`, which takes an optional human-readable `name` and a `latex` symbol used when the
-    object is displayed.
+    A coin has one parameter, the probability $p$ that it lands heads. We describe it with a
+    `@parameter_dataclass`, which is a frozen dataclass and also a JAX pytree (notebook 2 explains
+    why that is useful). Each field is declared with `parameter(...)`. Both of its arguments are
+    optional: `name` is a readable description, and `latex` is the symbol used when the object is
+    displayed.
     """)
     return
 
@@ -95,12 +96,12 @@ def _():
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    Click the object above to expand it. Every astroinfer object has a rich display like this, so
-    you can always just *look* at what you have.
+    Clicking the object's name expands or collapses it. Every astroinfer object has a display like
+    this one, which is a quick way to check what you are working with.
 
-    ## Step 2 · Describe the data $d$
+    ## The data
 
-    One flip gives one boolean: did it land heads?
+    One flip gives one boolean, whether the coin landed heads:
     """)
     return
 
@@ -111,33 +112,21 @@ class Flip:
     heads: bool = parameter(name="Landed heads", latex=r"\hat{h}")
 
 
-@app.cell(hide_code=True)
+@app.cell
 def _():
-    mo.md(r"""
-    ## Step 3 · Write the measurement process $K(d\mid\theta)$
-
-    This is the heart of every model. For a single flip,
-    $K(\hat h\mid p) = p^{\hat h}(1-p)^{1-\hat h}$.
-    """)
+    Flip(heads=True)
     return
 
 
 @app.cell(hide_code=True)
 def _():
-    mo.callout(mo.md(r"""
-    **🧩 What you implement in a `MeasurementProcess`**
+    mo.md(r"""
+    ## The measurement process
 
-    | attribute / method | what it is |
-    |---|---|
-    | `parameter_type` | your $\theta$ class |
-    | `data_type` | your $d$ class |
-    | `sample_single(self, theta, key)` | draw **one** $d\sim K(\cdot\mid\theta)$ for **one** $\theta$, using the JAX `key` |
-    | `logpdf_single(self, d, theta)` | return the scalar $\log K(d\mid\theta)$ for **one** $d$ and **one** $\theta$ |
-
-    Write them for a *single* $\theta$ and a *single* observation. The base class vectorises them
-    (with `jax.vmap`) over any batch you hand it, manages random keys, and adds `.sample`, `.logpdf`
-    and `.PE`. Use `jax.numpy` inside them so everything stays differentiable.
-    """), kind="info")
+    For a single flip the likelihood is $\mathcal{L}(\hat h\mid p) = p^{\hat h}(1-p)^{1-\hat h}$. To
+    turn it into a measurement process, subclass `MeasurementProcess`, name the parameter and data
+    types, and write two methods, one that draws a flip and one that evaluates its log likelihood:
+    """)
     return
 
 
@@ -163,11 +152,32 @@ def _():
 
 @app.cell(hide_code=True)
 def _():
-    mo.md(r"""
-    ## Simulate: `.sample`
+    mo.callout(mo.md(r"""
+    **What you implement in a `MeasurementProcess`**
 
-    `flipper.sample(theta)` draws one observation per $\theta$. Pass `N=` for many independent
-    observations; they come back as **one** `Flip` object whose fields carry a leading *batch axis*.
+    | attribute / method | description |
+    |---|---|
+    | `parameter_type` | your $\theta$ class |
+    | `data_type` | your $d$ class |
+    | `sample_single(self, theta, key)` | draw one $d\sim \mathcal{L}(\cdot\mid\theta)$ for a single $\theta$, using the JAX `key` |
+    | `logpdf_single(self, d, theta)` | return the scalar $\log \mathcal{L}(d\mid\theta)$ for a single $d$ and $\theta$ |
+
+    Both methods should handle a single $\theta$ and a single observation. The base class
+    vectorises them with `jax.vmap` over whatever batch you pass in, handles the random keys, and
+    provides `.sample`, `.logpdf` and `.PE`. Write the methods with `jax.numpy` so that they stay
+    differentiable.
+    """), kind="info")
+    return
+
+
+@app.cell(hide_code=True)
+def _():
+    mo.md(r"""
+    ## Simulating data
+
+    `flipper.sample(theta)` draws one observation for each $\theta$. To get many independent
+    observations, pass `N=`. They come back as a single `Flip` object whose fields have an extra
+    leading *batch axis*:
     """)
     return
 
@@ -176,21 +186,27 @@ def _():
 def _(coin, flipper):
     one_flip = flipper.sample(coin)
     thousand_flips = flipper.sample(coin, N=1000)
+    mo.vstack([one_flip, thousand_flips])
+    return one_flip, thousand_flips
 
-    mo.vstack([
-        one_flip,
-        thousand_flips,
-        mo.md(f"`thousand_flips.batch_shape = {thousand_flips.batch_shape}`, and the fraction of "
-              f"heads is **{float(thousand_flips.heads.mean()):.3f}** (true $p$ = {coin.p})."),
-    ])
-    return (one_flip,)
+
+@app.cell(hide_code=True)
+def _(coin, thousand_flips):
+    mo.md(rf"""
+    `thousand_flips` holds all 1000 flips in one `Flip` object. Its display has the title
+    $\{{\hat h_n\}}$ and a *Batch* line $n \in 1\ldots 1000$, so `thousand_flips.batch_shape` is
+    `(1000,)`. Indexing works as for an array: `thousand_flips[0]` is the first flip and
+    `thousand_flips[:10]` the first ten. The fraction of heads is
+    {float(thousand_flips.heads.mean()):.3f}, and the true $p$ is {coin.p}.
+    """)
+    return
 
 
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    `.sample` broadcasts over batches of $\theta$ too. Three coins, 500 flips each, gives a batch of
-    shape `(3, 500)`, with no loops in sight:
+    `.sample` also broadcasts over a batch of $\theta$. With three coins and `N=500` we get a batch
+    of shape `(3, 500)`:
     """)
     return
 
@@ -214,12 +230,11 @@ def _(flipper):
 
 @app.cell(hide_code=True)
 def _():
-    mo.callout(mo.md(r"""
-    **🎲 Randomness, without the bookkeeping.** Every measurement process carries a JAX key
-    (`flipper.key`). Calling `.sample(theta)` splits it, so repeated calls give fresh noise. Pass
-    `key=` (a JAX key or an `int`) when you want a *reproducible* draw; that leaves the internal key
-    untouched. `flipper.seed(123)` resets it.
-    """), kind="neutral")
+    mo.md(r"""
+    A measurement process keeps its own JAX key in `flipper.key`. Each call to `.sample` splits it,
+    so repeated calls give different flips. For a reproducible draw, pass `key=` (a JAX key or an
+    integer); this leaves the internal key alone. `flipper.seed(123)` resets the internal key.
+    """)
     return
 
 
@@ -232,8 +247,8 @@ def _(coin, flipper):
     | call | flips |
     |---|---|
     | `sample(coin, N=8, key=42)` | `{np.asarray(_a.heads).astype(int)}` |
-    | `sample(coin, N=8, key=42)` | `{np.asarray(_b.heads).astype(int)}`  (identical) |
-    | `sample(coin, N=8)` | `{np.asarray(_c.heads).astype(int)}`  (fresh) |
+    | `sample(coin, N=8, key=42)` | `{np.asarray(_b.heads).astype(int)}` (same as above) |
+    | `sample(coin, N=8)` | `{np.asarray(_c.heads).astype(int)}` (different) |
     """)
     return
 
@@ -241,11 +256,11 @@ def _(coin, flipper):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## Score: `.logpdf`
+    ## The likelihood
 
-    `flipper.logpdf(d, theta)` evaluates $\log K(d\mid\theta)$, broadcasting the batch shapes of $d$
-    and $\theta$ against each other. Hand it a *grid* of coins and you get the whole likelihood
-    curve in one call:
+    `flipper.logpdf(d, theta)` evaluates $\log \mathcal{L}(d\mid\theta)$, broadcasting the batch shapes of $d$
+    and $\theta$ against each other. Passing one flip and a grid of coins gives the likelihood as a
+    function of $p$:
     """)
     return
 
@@ -257,7 +272,7 @@ def _(flipper, one_flip):
 
     _fig, _ax = plt.subplots(figsize=(6.4, 2.8))
     _ax.plot(p_grid, jnp.exp(log_like), color=style.POSTERIOR)
-    _ax.set(xlabel="$p$", ylabel=r"$K(\hat h \mid p)$",
+    _ax.set(xlabel="$p$", ylabel=r"$\mathcal{L}(\hat h \mid p)$",
             title=f"Likelihood after one flip ({'heads' if one_flip.heads else 'tails'})")
     _fig
     return (p_grid,)
@@ -266,14 +281,14 @@ def _(flipper, one_flip):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## Infer: `.PE`
+    ## Parameter estimation
 
-    Parameter estimation needs a prior for every field of $\theta$, given as a dict of
-    [numpyro distributions](https://num.pyro.ai/en/stable/distributions.html). `.PE` runs NUTS on
-    $K(d\mid\theta)\,\pi(\theta)$ and returns the draws as a DataFrame, together with the log
-    likelihood and the prior density of every draw (you will see why those matter in notebook 8).
-
-    Passing `just_prior=True` samples the prior alone, which is handy for comparison.
+    `.PE` needs a prior for every field of $\theta$, given as a dict of
+    [numpyro distributions](https://num.pyro.ai/en/stable/distributions.html). It runs NUTS on
+    $\mathcal{L}(d\mid\theta)\,\pi(\theta)$ and returns the posterior draws in a DataFrame, along with the log
+    likelihood and the prior density of each draw. Those last two columns come up again in
+    notebook 8. With `just_prior=True` it samples the prior instead, which we plot below for
+    comparison.
     """)
     return
 
@@ -299,7 +314,7 @@ def _(coin, one_flip, p_grid, posterior_one, prior_draws):
              label="exact: Beta")
     style.truth(_ax, coin.p)
     _ax.set(xlabel="$p$", ylabel="density", xlim=(0, 1),
-            title=f"One flip ({'heads' if _h else 'tails'}) barely moves the prior")
+            title=f"Prior and posterior after one flip ({'heads' if _h else 'tails'})")
     _ax.legend(loc="upper left")
     _fig
     return
@@ -309,14 +324,16 @@ def _(coin, one_flip, p_grid, posterior_one, prior_draws):
 def _():
     mo.md(r"""
     ---
-    ## Many flips: *core axes*
+    ## Many flips
 
-    One flip does not tell us much. Let's flip the coin $n$ times and treat the whole sequence as
-    **one** observation. The field `heads` is now a vector, and we say so with `index=`: it has a
-    *core axis* called `"flip"`. (Use `index_latex=` for the symbol shown in displays.)
+    A single flip hardly moves the posterior away from the prior, so we now flip the coin $n$ times
+    and treat the whole sequence as one observation. The field `heads` becomes a vector. We tell
+    astroinfer this with `index=`, which gives the field a *core axis* named `"flip"`
+    (`index_latex=` sets the symbol used in displays).
 
-    Core axes are part of what a *single* observation is. Batch axes, like the `N=1000` above, count
-    *how many* observations there are. Keeping the two apart is what lets astroinfer batch anything.
+    A core axis is part of a single observation: twenty flips make up one `Flips` object. Batch
+    axes, like the `N=1000` above, count how many observations there are. astroinfer keeps the two
+    separate so that it knows which axes to vectorise over.
     """)
     return
 
@@ -332,9 +349,9 @@ class Flips:
 def _():
     mo.md(r"""
     The measurement process now has a setting, the number of flips. Measurement processes are
-    dataclasses, so settings are just fields. Inside `logpdf_single` the flips are independent, so
-    the log likelihood **sums over the core axis**:
-    $\log K(\hat h_{1..n}\mid p) = \sum_k \log K(\hat h_k\mid p)$.
+    dataclasses, so a setting is an ordinary field. The flips are independent, so `logpdf_single`
+    sums the log likelihood over the core axis,
+    $\log \mathcal{L}(\hat h_{1..n}\mid p) = \sum_k \log \mathcal{L}(\hat h_k\mid p)$:
     """)
     return
 
@@ -362,7 +379,7 @@ def _():
     _d = _demo.sample(Coin(p=0.7), N=5)
     mo.vstack([_demo, _d,
                mo.md(f"Five observations of 20 flips: `heads.shape = {_d.heads.shape}`, "
-                     f"`batch_shape = {_d.batch_shape}`. Expand the object to see the batch axis "
+                     f"`batch_shape = {_d.batch_shape}`. The expanded display shows the batch axis "
                      "$n$ and the core axis $k$.")])
     return
 
@@ -370,11 +387,11 @@ def _():
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## Is it rigged? Play with it 🎛️
+    ## Detecting a biased coin
 
-    Choose a true $p$ and a number of flips. The cell below simulates the experiment, runs PE, and
-    compares it with the exact answer: with a uniform prior,
-    $p\mid\hat h \sim \mathrm{Beta}(1+n_\mathrm{heads},\;1+n_\mathrm{tails})$.
+    Use the sliders to choose a true $p$ and a number of flips. The cell below simulates the
+    experiment, runs PE, and plots the result next to the exact posterior, which for a uniform prior
+    is $p\mid\hat h \sim \mathrm{Beta}(1+n_\mathrm{heads},\;1+n_\mathrm{tails})$.
     """)
     return
 
@@ -410,7 +427,7 @@ def _(n_flips, p_grid, pe_priors, true_p):
 
     mo.vstack([
         _fig,
-        mo.md(f"$P(p > 0.5\\mid \\hat h)$ = **{_p_heads_biased:.3f}**. "
+        mo.md(f"$P(p > 0.5\\mid \\hat h)$ = {_p_heads_biased:.3f}. "
               "Try a true $p$ of 0.55: how many flips do you need before you can tell?"),
     ])
     return
@@ -419,17 +436,17 @@ def _(n_flips, p_grid, pe_priors, true_p):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## Recap
+    ## Summary
 
-    * `@parameter_dataclass` + `parameter(name=, latex=, index=)` describe $\theta$ and $d$.
-      `index=` declares **core axes** (part of one object); leading axes are **batch axes**.
-    * A `MeasurementProcess` needs `parameter_type`, `data_type`, `sample_single`, `logpdf_single`,
-      all written for **one** $\theta$ and **one** $d$.
-    * You get `.sample(theta, N=, key=)`, `.logpdf(d, theta)` and `.PE(d, priors)` for free, batched
-      over whatever shapes you pass.
+    * `@parameter_dataclass` and `parameter(name=, latex=, index=)` describe both $\theta$ and $d$.
+      Axes declared with `index=` are core axes; any extra leading axes are batch axes.
+    * A `MeasurementProcess` needs `parameter_type`, `data_type`, `sample_single` and
+      `logpdf_single`, written for one $\theta$ and one $d$.
+    * The base class then provides `.sample(theta, N=, key=)`, `.logpdf(d, theta)` and
+      `.PE(d, priors)`, batched over whatever shapes you pass.
 
-    Next, in **notebook 2**, we look under the hood of `@parameter_dataclass`: batches, JAX
-    gradients, and parameters that must stay inside a range.
+    Notebook 2 looks at `@parameter_dataclass` objects in more detail: batches, JAX gradients, and
+    parameters that have to stay within a range.
     """)
     return
 
@@ -437,17 +454,19 @@ def _():
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## ✏️ Your turn: the blurry camera
+    ## Exercise: the blurry camera
 
-    You film each flip, but the camera misreads the face with probability $\varepsilon = 0.1$. Each
-    *recorded* flip is heads with probability $p(1-\varepsilon) + (1-p)\varepsilon$.
+    Suppose you film each flip, and the camera misreads the face with probability
+    $\varepsilon = 0.1$. A recorded flip is then heads with probability
+    $p(1-\varepsilon) + (1-p)\varepsilon$.
 
-    1. Write `BlurryFlips(MeasurementProcess)` with fields `n_flips` and `epsilon`. Reuse `Coin` and
-       `Flips`.
+    1. Write `BlurryFlips(MeasurementProcess)` with fields `n_flips` and `epsilon`, reusing `Coin`
+       and `Flips`.
     2. Simulate 200 flips of a $p = 0.8$ coin and run PE.
-    3. Compare with `FlipMany`'s posterior on the *same* data. Which one is biased, and which way?
+    3. Run `FlipMany` on the same data and compare the two posteriors. Which one is biased, and in
+       which direction?
 
-    Write it in the empty cell below.
+    There is an empty cell below for your code.
     """)
     return
 
@@ -460,7 +479,7 @@ def _():
 
 @app.cell(hide_code=True)
 def _():
-    mo.accordion({"💡 Show a solution": mo.md(r"""
+    mo.accordion({"Show a solution": mo.md(r"""
     ```python
     @dataclass
     class BlurryFlips(MeasurementProcess):
@@ -485,7 +504,8 @@ def _():
     d = camera.sample(Coin(p=0.8), key=0)
     blurry = camera.PE(d, dict(p=dist.Uniform(0, 1)), seed=0)
     naive = FlipMany(n_flips=200).PE(d, dict(p=dist.Uniform(0, 1)), seed=0)
-    # naive is pulled towards 0.5: misreads make the coin look fairer than it is.
+    # The naive posterior is pulled towards 0.5, because misreads make the coin look fairer
+    # than it is.
     ```
     """)})
     return

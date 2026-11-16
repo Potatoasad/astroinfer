@@ -10,7 +10,7 @@ dependencies = []
 dev = [
     "astroinfer[marimo]",
     "astroinfer-tgmm[plot]",
-    "astroinfer-gwmockcat",
+    "astroinfer-gw",
     "marimo>=0.25.2",
     "matplotlib",
     "scipy",
@@ -28,7 +28,7 @@ members = ["packages/*"]
 # Packages in this repository (installed editable).
 astroinfer = { workspace = true }
 astroinfer-tgmm = { workspace = true }
-astroinfer-gwmockcat = { workspace = true }
+astroinfer-gw = { workspace = true }
 # Dependencies installed from git. These sources apply only inside this workspace;
 # see README "Installing" for what that means for users.
 gravpop = { git = "https://git.ligo.org/asad.hussain/gravpop", rev = "simplify-composite" }
@@ -39,7 +39,7 @@ plot-helper = { git = "https://github.com/Potatoasad/plot_helper" }
 testpaths = [
     "packages/astroinfer/tests",
     "packages/astroinfer-tgmm/tests",
-    "packages/astroinfer-gwmockcat/tests",
+    "packages/astroinfer-gw/tests",
 ]
 addopts = ["--import-mode=importlib"]
 markers = ["julia: needs Julia and fits TGMMs (slow on first run)"]

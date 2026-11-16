@@ -1,0 +1,54 @@
+# Jupyter Book 2 (MyST) configuration. Build with: jupyter-book build --html
+version: 1
+project:
+  title: astroinfer
+  description: Typed forward models and hierarchical inference in JAX.
+  thumbnail: assets/astroinfer-icon.svg
+  github: https://github.com/Potatoasad/astroinfer
+  settings:
+    # Progress bars and library warnings go to stderr; keep them off the pages.
+    output_stderr: remove
+  exclude:
+    - _build/**
+    - snippets/**
+    - _prototype/**
+  toc:
+    - file: index.md
+    - title: Getting started
+      children:
+        - file: getting-started.md
+        - file: quickstart.md
+        - file: installation.md
+        - file: why-astroinfer.md
+    - file: examples/index.md
+      children:
+        - file: examples/01_coin_flips.ipynb
+        - file: examples/02_lighthouse.ipynb
+        - file: examples/03_doctors_office.ipynb
+        - file: examples/04_coin_mint.ipynb
+        - file: examples/05_auditing_the_mint.ipynb
+        - file: examples/06_flux_limited_survey.ipynb
+        - file: examples/07_sharper_telescopes.ipynb
+        - file: examples/08_star_catalog.ipynb
+        - file: examples/09_your_own_representation.ipynb
+    - title: User guide
+      children:
+        - file: user-guide/terminology.md
+        - file: user-guide/parameters.md
+        - file: user-guide/measurement-processes.md
+        - file: user-guide/population-models.md
+        - file: user-guide/population-inference.md
+        - file: user-guide/catalogs.md
+    - title: Explanation and reference
+      children:
+        - file: how-it-works.md
+        - file: sharp-bits.md
+        - file: api.md
+site:
+  template: book-theme
+  options:
+    logo: assets/astroinfer-logo.svg
+    logo_dark: assets/astroinfer-logo-dark.svg
+    logo_alt: astroinfer
+    favicon: assets/favicon.ico
+    style: custom.css

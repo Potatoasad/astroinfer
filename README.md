@@ -1,92 +1,153 @@
-# astroinfer
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/astroinfer-logo-dark.svg">
+    <img src="assets/astroinfer-logo.svg" alt="astroinfer" width="320">
+  </picture>
+</h1>
+**astroinfer** is a JAX-based framework for astrophysical simulation and Bayesian inference.
+Define a physical system and its measurement process once, then use the same model to simulate
+observations, estimate individual parameters, and model and infer population distributions.
 
-Typed forward models and hierarchical inference in JAX.
+[Documentation](docs/index.md) | [Getting started](docs/getting-started.md) |
+[Quickstart](docs/quickstart.md) | [Installation](docs/installation.md) | [Examples](tutorials)
 
-You describe your parameters $\theta$ and data $d$ as typed, batched dataclasses, write the
-measurement process $K(d\mid\theta)$ for **one** $\theta$ and **one** observation, and astroinfer
-does the rest: batching, random keys, parameter estimation, differentiable population models,
-population inference with selection effects, and catalogs of posteriors with pluggable,
-saveable representations.
+## Example
+
+Imagine an experiment in which you flip a coin 50 times and write down the whole list of heads
+and tails as your data. The parameters $\theta$ go into a measurement process
+$\mathcal{L}(d\mid\theta)$, which produces the data $d$, and each of the three is a class you
+write. The code below runs from top to bottom, starting with these imports:
 
 ```python
 from dataclasses import dataclass
-import jax, jax.numpy as jnp
+
+import jax
+import jax.numpy as jnp
 import numpyro.distributions as dist
+
 from astroinfer import MeasurementProcess, parameter, parameter_dataclass
-
-@parameter_dataclass(latex=r"\mathrm{coin}")
-class Coin:
-    p: float = parameter(name="Probability of heads", latex="p")
-
-@parameter_dataclass(latex=r"\hat h")
-class Flips:
-    heads: bool = parameter(latex=r"\hat h", index=("flip",))
-
-@dataclass
-class FlipMany(MeasurementProcess):
-    n_flips: int = 50
-    parameter_type, data_type = Coin, Flips
-
-    def sample_single(self, theta, key):
-        return Flips(heads=jax.random.bernoulli(key, theta.p, (self.n_flips,)))
-
-    def logpdf_single(self, d, theta):
-        return jnp.sum(jnp.where(d.heads, jnp.log(theta.p), jnp.log1p(-theta.p)))
-
-experiment = FlipMany()
-d = experiment.sample(Coin(p=0.7))
-posterior = experiment.PE(d, {"p": dist.Uniform(0, 1)})
 ```
 
-## What's in this repository
+### Parameters $\theta$
 
-| path | what |
-|---|---|
-| [`packages/astroinfer`](packages/astroinfer) | the core: parameters, measurement processes, `generative` population models, inference, detection, catalogs and representations |
-| [`packages/astroinfer-tgmm`](packages/astroinfer-tgmm) | extension: truncated Gaussian mixture (TGMM) catalog representations (uses Julia) |
-| [`packages/astroinfer-gwmockcat`](packages/astroinfer-gwmockcat) | extension: GWMockCat-style mock gravitational-wave measurement process |
-| [`tutorials/`](tutorials) | nine marimo notebooks, from a coin flip to selection effects and custom representations: **start here** |
-| [`notebooks/gw/`](notebooks/gw) | the gravitational-wave track: mock catalog, TGMM fits, proposal-based population inference |
+A coin has a probability $p$ of landing heads.
 
-## Installing
+```python
+@parameter_dataclass
+class Coin:
+    p: float = parameter()
+```
 
-The packages are not on PyPI yet. Install from git, naming each package's subdirectory:
+### Data $d$
+
+The data are the 50 flips, `True` for heads. `index` makes `heads` an array along an axis named
+`flip`, written $i$.
+
+```python
+@parameter_dataclass
+class Flips:
+    heads: bool = parameter(index=("flip",), index_latex=("i",))
+```
+
+### Measurement process $\mathcal{L}(d\mid\theta)$
+
+Flipping the coin 50 times gives a list of heads and tails. `sample_single` simulates the 50
+flips, and `logpdf_single` returns the log probability of a given list for a coin with
+probability $p$.
+
+```python
+@dataclass
+class FlipCoin(MeasurementProcess):
+    n_flips: int = 50
+
+    parameter_type = Coin
+    data_type = Flips
+
+    def sample_single(self, theta, key):
+        h = jax.random.bernoulli(key, theta.p, (self.n_flips,))
+        return Flips(heads=h)
+
+    def logpdf_single(self, d, theta):
+        p = theta.p
+        return jnp.where(d.heads, jnp.log(p), jnp.log1p(-p)).sum()
+```
+
+### Simulation and inference
+
+The measurement process now runs the experiment 1000 times, evaluates the likelihood of every
+outcome, and samples the posterior of $p$ given the first one:
+
+```python
+experiment = FlipCoin(n_flips=50)
+coin = Coin(p=0.7)
+
+d = experiment.sample(coin, N=1000, key=0)   # 1000 experiments
+d.batch_shape                                # (1000,)
+experiment.logpdf(d, coin)                   # log L(d | theta), shape (1000,)
+
+priors = {"p": dist.Uniform(0, 1)}
+posterior = experiment.PE(d[0], priors)      # NUTS on the first experiment
+posterior["p"].mean()
+```
+
+`sample_single` and `logpdf_single` were written for one coin and one experiment. astroinfer
+applies them to batches of any shape with `jax.vmap`, manages the random keys, and passes the
+likelihood to NUTS.
+
+## Beyond one object
+
+The same measurement process is the starting point for population inference. A population
+model $\pi(\theta\mid\Lambda)$ describes how $\theta$ is spread over many objects, and
+astroinfer samples the hyperparameters $\Lambda$ from a batch of measurements, with a selection
+term when only some objects are detected. The posteriors of single objects can be kept in a
+`Catalog`, which saves them to disk and exports them as arrays for a population analysis.
+
+## Where to go next
+
+- [Getting started](docs/getting-started.md): the coin flip example step by step, with outputs.
+- [Examples](tutorials): nine worked problems, from a coin flip to selection effects and custom
+  catalog representations.
+- [User guide](docs/user-guide/terminology.md): parameter types, measurement processes,
+  population models, population inference and catalogs, one page each.
+- [API reference](docs/api.md): every public class and function.
+
+## Installation
+
+astroinfer is not on PyPI yet. Install it from git:
 
 ```bash
 uv add "astroinfer @ git+https://github.com/Potatoasad/astroinfer#subdirectory=packages/astroinfer"
-
-# extensions: list astroinfer too, so it also comes from git
-uv add "astroinfer @ git+https://github.com/Potatoasad/astroinfer#subdirectory=packages/astroinfer" \
-       "astroinfer-tgmm @ git+https://github.com/Potatoasad/astroinfer#subdirectory=packages/astroinfer-tgmm"
 ```
 
-Some dependencies live only in git ([gravpop](https://git.ligo.org/asad.hussain/gravpop),
-[truncatedgaussianmixtures](https://github.com/Potatoasad/truncatedgaussianmixtures),
-[plot_helper](https://github.com/Potatoasad/plot_helper)). This repository's `uv.lock` pins them,
-but a project that installs astroinfer must point at them too, e.g. in its own `pyproject.toml`:
+Some dependencies are only available from git and have to be listed in your project's
+`[tool.uv.sources]`. See [Installation](docs/installation.md).
 
-```toml
-[tool.uv.sources]
-gravpop = { git = "https://git.ligo.org/asad.hussain/gravpop", rev = "simplify-composite" }
-truncatedgaussianmixtures = { git = "https://github.com/Potatoasad/truncatedgaussianmixtures", rev = "jax-backend" }
-```
+## What is in this repository
+
+| path | contents |
+|---|---|
+| [`packages/astroinfer`](packages/astroinfer) | the core library |
+| [`packages/astroinfer-tgmm`](packages/astroinfer-tgmm) | truncated Gaussian mixture (TGMM) catalog representations; uses Julia |
+| [`packages/astroinfer-gw`](packages/astroinfer-gw) | gravitational-wave models, including a GWMockCat-style measurement process for mock catalogs |
+| [`docs/`](docs) | the documentation |
+| [`tutorials/`](tutorials) | nine marimo notebooks, from a coin flip to selection effects and custom representations |
+| [`package_tour/`](package_tour) | a notebook that goes through every type and its methods |
+| [`notebooks/gw/`](notebooks/gw) | gravitational-wave examples: a mock catalog, TGMM fits, and population inference with a proposal |
 
 ## Developing
 
-This is a [uv workspace](https://docs.astral.sh/uv/concepts/projects/workspaces/): one
-environment with every package installed editable, plus marimo, matplotlib and pytest.
+The repository is a [uv workspace](https://docs.astral.sh/uv/concepts/projects/workspaces/): one
+environment with every package installed in editable mode, plus marimo, matplotlib and pytest.
 
 ```bash
 uv sync
-uv run marimo edit tutorials/01_coin_flips.py   # the tutorials
-uv run pytest -m "not julia"                    # fast tests
-uv run pytest                                   # everything (TGMM tests start Julia)
-scripts/run_tutorials.sh                        # run every tutorial as a script
+uv run marimo edit tutorials/01_coin_flips.py
+uv run pytest -m "not julia"   # tests that do not start Julia
+uv run pytest                  # all tests; the first TGMM fit installs Julia
+scripts/run_tutorials.sh       # run every tutorial as a script
 ```
-
-The first TGMM fit installs Julia into `.venv` (one-time, a few minutes).
 
 To add a package, create `packages/<name>/` with its own `pyproject.toml`, depend on
 `astroinfer` by name, and add `<name> = { workspace = true }` to the root `[tool.uv.sources]`.
 A new catalog representation registers itself through the `astroinfer.representations` entry
-point (see `packages/astroinfer-tgmm/pyproject.toml`).
+point; see `packages/astroinfer-tgmm/pyproject.toml`.

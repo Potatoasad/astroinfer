@@ -29,22 +29,55 @@ with app.setup:
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    # 2 · The lighthouse 🗼
+    # 2. The lighthouse
 
-    A lighthouse stands somewhere off a straight coast: at position $\alpha$ *along* the shore and a
-    distance $\beta$ *out to sea*. It spins and emits short flashes at uniformly random angles. You
-    can't see the lighthouse, but a row of detectors along the shore records **where** each flash
-    hits the coast. Where is the lighthouse?
+    A lighthouse stands somewhere off a straight coast, at position $\alpha$ along the shore and a
+    distance $\beta$ out to sea. It rotates and emits short flashes at uniformly random angles. You
+    can't see the lighthouse, but a row of detectors along the shore records where each flash hits
+    the coast. Where is the lighthouse?
+
+    <div style="text-align:center;margin:0.5em 0 1em">
+    <svg viewBox="0 0 640 330" width="640" style="max-width:100%;height:auto" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Geometry of the lighthouse problem">
+    <defs><marker id="lh-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#52514e"/></marker></defs>
+    <rect x="0" y="0" width="640" height="330" rx="6" fill="#fcfcfb"/>
+    <rect x="20" y="20" width="600" height="220" fill="#2a78d6" fill-opacity="0.06"/>
+    <text x="36" y="44" font-family="sans-serif" font-size="13" fill="#8a8984">sea</text>
+    <line x1="20" y1="240" x2="620" y2="240" stroke="#0b0b0b" stroke-width="1.5"/>
+    <g fill="#8a8984"><rect x="45" y="237" width="6" height="6"/><rect x="77" y="237" width="6" height="6"/><rect x="109" y="237" width="6" height="6"/><rect x="141" y="237" width="6" height="6"/><rect x="173" y="237" width="6" height="6"/><rect x="205" y="237" width="6" height="6"/><rect x="237" y="237" width="6" height="6"/><rect x="269" y="237" width="6" height="6"/><rect x="333" y="237" width="6" height="6"/><rect x="365" y="237" width="6" height="6"/><rect x="397" y="237" width="6" height="6"/><rect x="429" y="237" width="6" height="6"/><rect x="461" y="237" width="6" height="6"/><rect x="493" y="237" width="6" height="6"/><rect x="525" y="237" width="6" height="6"/><rect x="557" y="237" width="6" height="6"/><rect x="589" y="237" width="6" height="6"/></g>
+    <text x="604" y="264" text-anchor="end" font-family="sans-serif" font-size="13" fill="#8a8984">detectors along the shore</text>
+    <line x1="300" y1="110" x2="300" y2="240" stroke="#52514e" stroke-width="1.2" stroke-dasharray="5 4"/>
+    <line x1="300" y1="70" x2="419" y2="240" stroke="#eda100" stroke-width="2.2"/>
+    <circle cx="419" cy="240" r="5.5" fill="#1baf7a"/>
+    <path d="M 300 116 A 46 46 0 0 0 326.4 107.7" fill="none" stroke="#52514e" stroke-width="1.2"/>
+    <text x="317" y="136" font-family="KaTeX_Math, 'Times New Roman', serif" font-style="italic" font-size="20" fill="#0b0b0b">φ</text>
+    <ellipse cx="300" cy="106" rx="18" ry="4.5" fill="#52514e"/>
+    <polygon points="295,77 305,77 309,104 291,104" fill="#0b0b0b"/>
+    <rect x="294" y="63" width="12" height="14" fill="#0b0b0b"/>
+    <polygon points="290,64 310,64 300,54" fill="#0b0b0b"/>
+    <circle cx="300" cy="70" r="4.5" fill="#eda100"/>
+    <text x="318" y="70" font-family="KaTeX_Main, 'Times New Roman', serif" font-size="18" fill="#0b0b0b">(<tspan font-family="KaTeX_Math, 'Times New Roman', serif" font-style="italic">α</tspan>, <tspan font-family="KaTeX_Math, 'Times New Roman', serif" font-style="italic">β</tspan>)</text>
+    <line x1="256" y1="70" x2="286" y2="70" stroke="#8a8984" stroke-width="1"/>
+    <line x1="262" y1="72" x2="262" y2="238" stroke="#52514e" stroke-width="1.2" marker-start="url(#lh-arrow)" marker-end="url(#lh-arrow)"/>
+    <text x="248" y="162" text-anchor="end" font-family="KaTeX_Math, 'Times New Roman', serif" font-style="italic" font-size="20" fill="#0b0b0b">β</text>
+    <line x1="120" y1="244" x2="120" y2="304" stroke="#8a8984" stroke-width="1"/>
+    <line x1="300" y1="244" x2="300" y2="304" stroke="#8a8984" stroke-width="1"/>
+    <line x1="122" y1="296" x2="298" y2="296" stroke="#52514e" stroke-width="1.2" marker-start="url(#lh-arrow)" marker-end="url(#lh-arrow)"/>
+    <text x="210" y="288" text-anchor="middle" font-family="KaTeX_Math, 'Times New Roman', serif" font-style="italic" font-size="20" fill="#0b0b0b">α</text>
+    <text x="120" y="322" text-anchor="middle" font-family="KaTeX_Main, 'Times New Roman', serif" font-size="16" fill="#0b0b0b">0</text>
+    <path d="M 414 260 L 419 255.5 L 424 260" fill="none" stroke="#0b0b0b" stroke-width="1.3"/>
+    <text x="414" y="272" font-family="KaTeX_Math, 'Times New Roman', serif" font-style="italic" font-size="20" fill="#0b0b0b">x<tspan font-size="14" dy="5">k</tspan></text>
+    </svg>
+    </div>
 
     A flash at angle $\phi\sim U(-\tfrac\pi2,\tfrac\pi2)$ lands at $\hat x = \alpha + \beta\tan\phi$,
-    which makes every recorded position a draw from a **Cauchy distribution**,
+    so every recorded position is a draw from a *Cauchy distribution*,
 
     $$
-    K(\hat x_k\mid\alpha,\beta) = \frac{\beta}{\pi\left[\beta^2 + (\hat x_k-\alpha)^2\right]} .
+    \mathcal{L}(\hat x_k\mid\alpha,\beta) = \frac{\beta}{\pi\left[\beta^2 + (\hat x_k-\alpha)^2\right]} .
     $$
 
-    This classic problem (Gull 1988) is a great playground for the part of astroinfer we skipped in
-    notebook 1: **what a `@parameter_dataclass` object actually is**, and what you can do with it.
+    This is Gull's (1988) lighthouse problem. We use it to look at the part of astroinfer that
+    notebook 1 skipped over: what a `@parameter_dataclass` object is, and what you can do with one.
     """)
     return
 
@@ -54,14 +87,11 @@ def _():
     mo.md(r"""
     ## The model
 
-    Three new things in the class definitions below:
-
-    * `support=constraints.positive` on $\beta$ declares that the lighthouse is out at sea. We'll use
-      it in the section on constrained parameters.
-    * `Flashes.x` has a core axis `"flash"`, as in notebook 1: one observation is a whole night of
-      flashes.
-    * `flash_density` is an ordinary method on the parameter class, decorated with
-      `@batched_method`. More on that soon.
+    The class definitions below introduce a few things that were not in notebook 1.
+    `support=constraints.positive` on $\beta$ declares that the lighthouse is out at sea; we use it
+    in the section on constrained parameters. `Flashes.x` has a core axis `"flash"`, so one
+    observation is a whole night of flashes. Finally, `flash_density` is an ordinary method on the
+    parameter class, decorated with `@batched_method`, which is explained further down.
     """)
     return
 
@@ -135,18 +165,18 @@ def _(lighthouse, tonight):
     _off = int(np.sum((np.asarray(tonight.x) < -8) | (np.asarray(tonight.x) > 10)))
     _ax.set_title(f"{tonight.x.shape[0]} flashes ({_off} land off the plot)")
     _fig
-    return (draw_night,)
+    return
 
 
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ### The twist: don't average the flashes
+    ### Averaging the flashes
 
-    Your first instinct is to estimate $\alpha$ with the average flash position. For a Cauchy
-    distribution that never works: the mean of $n$ Cauchy draws is *itself* Cauchy with the same
-    width, no matter how large $n$ is. A single flash at a grazing angle lands kilometres away and
-    drags the mean with it. The median is fine, and the likelihood (which we'll use) is better still.
+    An obvious first estimate of $\alpha$ is the average flash position. For a Cauchy distribution
+    this does not work, because the mean of $n$ Cauchy draws is itself Cauchy with the same width,
+    however large $n$ is. A single flash at a grazing angle lands kilometres away and drags the mean
+    with it. The median does converge, and the likelihood, which we use below, does better still.
     """)
     return
 
@@ -163,7 +193,7 @@ def _(lighthouse):
     _ax.plot(_n, _running_median, color=style.POSTERIOR, label="running median")
     style.truth(_ax, lighthouse.alpha, orientation="horizontal", label=r"true $\alpha$")
     _ax.set(xscale="log", ylim=(-4, 6), xlabel="number of flashes", ylabel=r"estimate of $\alpha$",
-            title="The mean never settles down")
+            title="Running mean and median of the flash positions")
     _ax.legend(loc="upper left", bbox_to_anchor=(1.0, 1.0))
     _fig
     return
@@ -173,19 +203,19 @@ def _(lighthouse):
 def _():
     mo.md(r"""
     ---
-    ## A tour of `Parameters` objects
+    ## `Parameters` objects
 
-    A `@parameter_dataclass` is three things at once:
+    An object made by `@parameter_dataclass` is a frozen dataclass, with the usual fields, `==` and
+    constructor. It is also a JAX pytree, so `jax.jit`, `jax.grad` and `jax.vmap` accept it and
+    return the same type. And its fields have named axes: trailing *core* axes declared with
+    `index=`, and any number of leading *batch* axes, which all fields share and which broadcast
+    as in NumPy.
 
-    1. a frozen **dataclass** (fields, `==`, nice constructor);
-    2. a **JAX pytree**, so `jax.jit`, `jax.grad` and `jax.vmap` accept it and hand back the same type;
-    3. a container with **named axes**: trailing *core* axes declared with `index=`, and any number
-       of leading *batch* axes, shared by all fields and broadcast like NumPy.
+    ### Broadcasting
 
-    ### Batch axes broadcast
-
-    Give one field an array and the others scalars: the object has a batch of lighthouses. Fields
-    broadcast against each other, and `.broadcast()` materialises it.
+    If one field is an array and the others are scalars, the object holds a batch of lighthouses.
+    The fields broadcast against each other, and `.broadcast()` expands every field to the full
+    batch shape:
     """)
     return
 
@@ -208,11 +238,11 @@ def _():
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ### Batch axes stack, core axes stay put
+    ### Indexing
 
-    Sampling 4 nights for each of the 3 lighthouses gives `Flashes` with batch shape `(3, 4)`. The
-    core axis (30 flashes) always stays at the end. Index the **batch** axes with integers, slices or
-    boolean masks; index a **field** by name.
+    Sampling 4 nights for each of the 3 lighthouses gives `Flashes` with batch shape `(3, 4)`. New
+    batch axes are added in front, and the core axis (30 flashes) stays at the end. You can index
+    the batch axes with integers, slices or boolean masks, and pick out a field by name:
     """)
     return
 
@@ -237,12 +267,12 @@ def _(shoreline, three):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ### `@batched_method`: write methods for one object
+    ### Batched methods
 
-    `flash_density(x)` is written for **one** lighthouse and a grid `x`. Called on a batch of three
+    `flash_density(x)` is written for a single lighthouse and a grid `x`. On a batch of three
     lighthouses, plain NumPy broadcasting would try to combine shapes `(3,)` and `(400,)` and fail.
-    `@batched_method` `vmap`s the method over every batch axis instead, so the result has shape
-    `(3, 400)`: one curve per lighthouse.
+    `@batched_method` instead applies `vmap` to the method over every batch axis, so the result has
+    shape `(3, 400)`, with one curve per lighthouse:
     """)
     return
 
@@ -258,17 +288,18 @@ def _(three):
     _ax.set(xlabel=r"$x$ [km]", ylabel="flash density", title=f"three.flash_density(x): shape {curves.shape}")
     _ax.legend(loc="upper left", bbox_to_anchor=(1.0, 1.0))
     _fig
-    return
+    return (x_grid,)
 
 
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ### Dicts and DataFrames in, dicts out
+    ### Converting to and from dicts
 
-    `from_dict` accepts a dict *or* a DataFrame (extra columns are ignored), which is how posterior
-    samples become typed objects. `to_dict()` goes back. Objects are immutable, but fields may hold
-    NumPy arrays, so use `.copy()` before editing an array in place.
+    `from_dict` accepts either a dict or a DataFrame and ignores any extra columns. This is how
+    posterior samples are turned into typed objects. `to_dict()` converts back to a dict. The
+    objects are immutable, but their fields may hold NumPy arrays, so call `.copy()` before editing
+    an array in place.
     """)
     return
 
@@ -292,10 +323,10 @@ def _():
     mo.md(r"""
     ### Arithmetic and gradients
 
-    Objects of the same type add and subtract field by field, and scale by numbers. Because they are
-    pytrees, `jax.grad` of a function of a `Lighthouse` **returns a `Lighthouse`** holding
-    $\partial/\partial\alpha$ and $\partial/\partial\beta$. So a gradient step reads exactly like the
-    maths: `theta + lr * grad`.
+    Objects of the same type can be added and subtracted field by field, and multiplied by numbers.
+    Because they are pytrees, `jax.grad` of a function of a `Lighthouse` returns a `Lighthouse`
+    holding $\partial/\partial\alpha$ and $\partial/\partial\beta$. A gradient step is then written
+    as it is in the maths, `theta + lr * grad`:
     """)
     return
 
@@ -319,15 +350,15 @@ def _(shoreline, tonight):
 def _():
     mo.md(r"""
     ---
-    ## The likelihood surface with `outer=True`
+    ## The likelihood surface
 
-    A 2-D grid of lighthouses is just a `Lighthouse` with batch shape `(n_alpha, n_beta)`: give
-    `alpha` shape `(n_alpha, 1)` and `beta` shape `(1, n_beta)` and let them broadcast.
+    A 2-D grid of lighthouses is a `Lighthouse` with batch shape `(n_alpha, n_beta)`. To make one,
+    give `alpha` shape `(n_alpha, 1)` and `beta` shape `(1, n_beta)` and let them broadcast.
 
-    To compare **three different nights** at once, sample them as a batch of 3 and pass
-    `outer=True`: `.logpdf` then evaluates *every* lighthouse against *every* night, giving shape
-    `(n_alpha, n_beta, 3)`. (Without `outer=True` the two batch shapes are broadcast together, which
-    is what you want when they line up one-to-one.)
+    To compare three different nights, we sample them as a batch of 3 and pass `outer=True`.
+    `.logpdf` then evaluates every lighthouse against every night, giving shape
+    `(n_alpha, n_beta, 3)`. Without `outer=True` the two batch shapes are broadcast together, which
+    is what you want when they line up one-to-one.
     """)
     return
 
@@ -349,8 +380,13 @@ def _(lighthouse, shoreline):
         _ax.set(title=f"night {_i + 1}", xlabel=r"$\alpha$ [km]")
         _ax.grid(False)
     _axes[0].set_ylabel(r"$\beta$ [km]")
-    mo.vstack([mo.md(f"`grid.batch_shape = {grid.batch_shape}`, "
-                     f"`log_like_maps.shape = {log_like_maps.shape}`"), _fig])
+    mo.vstack([
+        grid,
+        mo.md(f"The *Batch* line of `grid` shows its two batch axes, {grid.batch_shape[0]} values "
+              f"of $\\alpha$ by {grid.batch_shape[1]} of $\\beta$. `log_like_maps` is a plain "
+              f"array of shape `{log_like_maps.shape}`, one likelihood map per night:"),
+        _fig,
+    ])
     return alpha_grid, beta_grid, grid
 
 
@@ -360,14 +396,15 @@ def _():
     ---
     ## Constrained parameters and the latent space
 
-    Let's find the maximum-likelihood lighthouse for tonight by gradient ascent. One problem: a step
-    can push $\beta$ below zero, where the likelihood is meaningless. The fix is to optimise in
-    **unconstrained coordinates**: map each field to the whole real line, step there, and map back.
+    Next we find the maximum-likelihood lighthouse for tonight by gradient ascent. A step can push
+    $\beta$ below zero, where the likelihood is meaningless, so we optimise in *unconstrained
+    coordinates* instead: map each field to the whole real line, take the step there, and map back.
 
-    That's what `support=` is for. `theta.to_unconstrained()` returns a `Lighthouse` holding the
-    *latent* point $z$ (here $z_\beta = \log\beta$, and $z_\alpha=\alpha$ since $\alpha$ has no
-    support declared), and `Lighthouse.from_unconstrained(z)` maps any real $z$ back inside the
-    supports. The latent point is the same type, so arithmetic and `jax.grad` work on it unchanged.
+    The `support=` declarations make this possible. `theta.to_unconstrained()` returns a
+    `Lighthouse` holding the *latent* point $z$. Here $z_\beta = \log\beta$, and $z_\alpha=\alpha$
+    because $\alpha$ has no declared support. `Lighthouse.from_unconstrained(z)` maps any real $z$
+    back inside the supports. The latent point has the same type, so arithmetic and `jax.grad`
+    work on it as before.
     """)
     return
 
@@ -377,9 +414,9 @@ def _(lighthouse):
     _z = lighthouse.to_unconstrained()
     mo.vstack([
         ai.LatentSpace(Lighthouse),
-        mo.md(f"`lighthouse.to_unconstrained()`: $z_\\alpha$ = {float(_z.alpha):.3f}, "
-              f"$z_\\beta$ = {float(_z.beta):.3f} = $\\log 1.5$. "
-              f"Round trip gives back $\\beta$ = {float(Lighthouse.from_unconstrained(_z).beta):.3f}."),
+        mo.md(f"`lighthouse.to_unconstrained()` gives $z_\\alpha$ = {float(_z.alpha):.3f} and "
+              f"$z_\\beta$ = {float(_z.beta):.3f} = $\\log 1.5$. Mapping back gives "
+              f"$\\beta$ = {float(Lighthouse.from_unconstrained(_z).beta):.3f}."),
     ])
     return
 
@@ -387,15 +424,19 @@ def _(lighthouse):
 @app.cell(hide_code=True)
 def _():
     mo.callout(mo.md(r"""
-    **🧩 What you implement for constrained parameters:** nothing but `support=` on the field, with a
-    [numpyro constraint](https://num.pyro.ai/en/stable/distributions.html#constraints)
-    (`constraints.positive`, `constraints.interval(0, 1)`, `constraints.unit_interval`, ...).
+    **What you implement for constrained parameters**
 
-    * Need different supports for one job? Build a space by hand and pass it:
-      `ai.LatentSpace(Lighthouse, {"alpha": dist.Uniform(-10, 10)})` (constraints or distributions,
-      whose `.support` is used), then `theta.to_unconstrained(space)`.
-    * Optimising doesn't care about Jacobians. If you move a *density* into latent space (e.g. to
-      sample there), add `space.log_abs_det_jacobian(z)`.
+    Only `support=` on the field, set to a
+    [numpyro constraint](https://num.pyro.ai/en/stable/distributions.html#constraints) such as
+    `constraints.positive`, `constraints.interval(0, 1)` or `constraints.unit_interval`.
+
+    If one task needs different supports, build a space by hand, for example
+    `ai.LatentSpace(Lighthouse, {"alpha": dist.Uniform(-10, 10)})`, and pass it to
+    `theta.to_unconstrained(space)`. The dict values can be constraints or distributions; for a
+    distribution its `.support` is used.
+
+    Optimisation does not need a Jacobian. If you move a density into latent space, for example to
+    sample there, add `space.log_abs_det_jacobian(z)`.
     """), kind="info")
     return
 
@@ -415,13 +456,22 @@ def _(shoreline, tonight):
     mle = path[-1]
     path_alpha = np.array([float(p.alpha) for p in path])
     path_beta = np.array([float(p.beta) for p in path])
-    mo.md(f"Maximum likelihood after 400 steps: $\\hat\\alpha$ = **{float(mle.alpha):.3f}**, "
-          f"$\\hat\\beta$ = **{float(mle.beta):.3f}**.")
+    mo.md(f"After 400 steps the maximum-likelihood estimate is $\\hat\\alpha$ = "
+          f"{float(mle.alpha):.3f}, $\\hat\\beta$ = {float(mle.beta):.3f}.")
     return mle, path_alpha, path_beta
 
 
 @app.cell
-def _(alpha_grid, beta_grid, grid, lighthouse, path_alpha, path_beta, shoreline, tonight):
+def _(
+    alpha_grid,
+    beta_grid,
+    grid,
+    lighthouse,
+    path_alpha,
+    path_beta,
+    shoreline,
+    tonight,
+):
     _L = np.asarray(shoreline.logpdf(tonight, grid))
     _fig, _ax = plt.subplots(figsize=(6.4, 3.8))
     _ax.pcolormesh(alpha_grid, beta_grid, np.exp(_L - _L.max()).T, cmap="Blues", shading="auto")
@@ -443,9 +493,9 @@ def _():
     ---
     ## The posterior
 
-    Finally, `.PE` as in notebook 1, with uniform priors over a 20 km stretch of coast and up to 6 km
-    out to sea. NUTS handles the positivity of $\beta$ through the prior's support. Then we turn the
-    draws into a typed batch of lighthouses with `from_dict`, and use it right away.
+    We run `.PE` as in notebook 1, with uniform priors over a 20 km stretch of coast and up to 6 km
+    out to sea. NUTS keeps $\beta$ positive through the support of its prior. `from_dict` then
+    turns the draws into a batch of lighthouses, which we use for the plots below.
     """)
     return
 
@@ -485,7 +535,7 @@ def _(posterior_lighthouses, tonight, x_grid):
     _ax.plot(np.asarray(tonight.x), np.zeros(tonight.x.shape), "|", color=style.DATA, markersize=14,
              mew=2, label="tonight's flashes")
     _ax.set(xlim=(-8, 8), xlabel=r"$x$ [km]", ylabel="flash density",
-            title="Where the next flash will land")
+            title="Posterior predictive flash density")
     _ax.legend(loc="upper left", bbox_to_anchor=(1.0, 1.0))
     _fig
     return
@@ -494,21 +544,20 @@ def _(posterior_lighthouses, tonight, x_grid):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## Recap
+    ## Summary
 
-    * **Batch axes** lead and broadcast across fields; **core axes** (`index=`) trail and belong to one
-      object. `batch_shape`, `broadcast`, `reshape_batch` and indexing (int / slice / boolean mask on
-      batch axes, `obj["field"]` by name) only ever touch the batch.
-    * `from_dict` takes dicts and DataFrames; `to_dict` returns a dict; `.parameters` lists the fields;
-      `.copy()` gives fresh arrays.
-    * Objects are pytrees: `+`, `-`, `* number`, and `jax.grad` returning the same type.
-    * `@batched_method` lets you write a method for one object and call it on any batch.
+    * Batch axes come first and broadcast across fields; core axes (`index=`) come last and belong
+      to a single object. `batch_shape`, `broadcast`, `reshape_batch` and integer, slice or mask
+      indexing act on the batch axes only.
+    * Objects are pytrees, so they support `+`, `-` and multiplication by a number, and `jax.grad`
+      returns the same type.
+    * `@batched_method` lets you write a method for one object and call it on a batch.
     * `.logpdf(d, theta, outer=True)` evaluates every $\theta$ against every $d$.
-    * `support=` plus `to_unconstrained` / `from_unconstrained` (or a custom `LatentSpace`) keeps
-      optimisation inside the allowed region.
+    * `support=` together with `to_unconstrained` and `from_unconstrained` keeps an optimiser inside
+      the allowed region.
 
-    Next, **notebook 3** looks at what `.PE` really returns, and how to make your own objects display
-    beautifully.
+    Notebook 3 looks at `PosteriorData`, the typed object `.PE` can return instead of a DataFrame,
+    and at how to give your own objects a display like the ones above.
     """)
     return
 
@@ -516,13 +565,14 @@ def _():
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## ✏️ Your turn: a short coastline
+    ## Exercise: a short coastline
 
-    Your detectors only cover the stretch $-L\le x\le L$ with $L = 3$ km; flashes outside it are
-    never recorded. Each recorded flash is now a **truncated** Cauchy draw:
+    Suppose your detectors only cover the stretch $-L\le x\le L$ with $L = 3$ km, and flashes
+    outside it are never recorded. Each recorded flash is then a draw from a truncated Cauchy
+    distribution:
 
     $$
-    K(\hat x_k\mid\alpha,\beta) = \frac{\text{Cauchy}(\hat x_k;\alpha,\beta)}
+    \mathcal{L}(\hat x_k\mid\alpha,\beta) = \frac{\text{Cauchy}(\hat x_k;\alpha,\beta)}
     {F(L) - F(-L)}, \qquad F(x) = \tfrac12 + \tfrac1\pi\arctan\frac{x-\alpha}{\beta}.
     $$
 
@@ -542,7 +592,7 @@ def _():
 
 @app.cell(hide_code=True)
 def _():
-    mo.accordion({"💡 Show a solution": mo.md(r"""
+    mo.accordion({"Show a solution": mo.md(r"""
     ```python
     @dataclass
     class ShortCoast(MeasurementProcess):
@@ -574,7 +624,7 @@ def _():
     priors = dict(alpha=dist.Uniform(-10, 10), beta=dist.Uniform(0, 6))
     right = coast.PE(d, priors, seed=0)
     wrong = Shoreline().PE(d, priors, seed=0)
-    # `wrong` thinks the lighthouse is closer to the middle of the detectors and nearer the shore.
+    # `wrong` places the lighthouse closer to the middle of the detectors and nearer the shore.
     ```
     """)})
     return

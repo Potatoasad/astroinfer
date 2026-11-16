@@ -11,20 +11,21 @@ Colors have fixed roles across every tutorial, so a reader learns them once:
     style.PRIOR      orange   prior draws / the population before data
     style.DATA       aqua     observed data
     style.EXTRA      violet   a fourth series (e.g. "without selection")
-    style.TRUTH      ink      true values, always a dashed dark line
+    style.TRUTH      navy     true values, always a dashed navy line
 """
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 
 # A colorblind-checked categorical order; slots are never cycled.
+# BLUE is the astroinfer brand blue (assets/README.md).
 BLUE, ORANGE, AQUA, YELLOW, MAGENTA, GREEN, VIOLET, RED = (
-    "#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948",
+    "#418FC5", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948",
 )
 SERIES = [BLUE, ORANGE, AQUA, VIOLET]
 
 POSTERIOR, PRIOR, DATA, EXTRA = BLUE, ORANGE, AQUA, VIOLET
-INK, INK_2, MUTED, GRID, SURFACE = "#0b0b0b", "#52514e", "#8a8984", "#e4e3df", "#fcfcfb"
+INK, INK_2, MUTED, GRID, SURFACE = "#17243D", "#52514e", "#8a8984", "#e4e3df", "#fcfcfb"
 TRUTH = INK
 
 

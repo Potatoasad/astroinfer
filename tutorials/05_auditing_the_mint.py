@@ -29,13 +29,14 @@ with app.setup:
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    # 5 · Auditing the mint 🔍
+    # 5. Auditing the mint
 
-    A regulator buys $E = 40$ coins from the mint of notebook 4 and flips each one 30 times. From
-    those flips alone, what can they say about the **mint**, i.e. its hyperparameters $\Lambda$?
+    A regulator buys $E = 40$ coins from the mint of notebook 4 and flips each one 30 times. What
+    can the regulator learn from those flips about the mint itself, that is, about its
+    hyperparameters $\Lambda$?
 
-    This is **hierarchical inference**: every coin has its own unknown $p_i$, drawn from
-    $\pi(p\mid\Lambda)$, and we want $\Lambda$ without ever pinning down any single $p_i$.
+    This is *hierarchical inference*. Every coin has its own unknown $p_i$, drawn from
+    $\pi(p\mid\Lambda)$, and we want to infer $\Lambda$ without pinning down any single $p_i$.
     """)
     return
 
@@ -43,8 +44,8 @@ def _():
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    **Recap from notebooks 1 and 4.** Each coin is a `Coin`, each experiment a `Flips` vector, and
-    `FlipMany` is the measurement process. The mint stamps
+    The classes below are copied from notebooks 1 and 4. Each coin is a `Coin`, each experiment is
+    a `Flips` vector, and `FlipMany` is the measurement process. The mint stamps coins with
     $p\sim\mathcal{TN}(\mu,\sigma)_{[0,1]}$.
     """)
     return
@@ -91,10 +92,11 @@ def _():
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## Simulate the audit
+    ## Simulating the audit
 
-    Two lines, both from earlier notebooks: stamp $E$ coins from the mint, then flip each one. The
-    data are a single `Flips` object with batch shape `(E,)`, one row per coin.
+    The simulation takes two lines, both from earlier notebooks. We stamp $E$ coins from the mint
+    and then flip each one. The data are a single `Flips` object with batch shape `(E,)`, one row
+    per coin:
     """)
     return
 
@@ -118,7 +120,7 @@ def _(N_FLIPS, data, true_coins):
     _ax.scatter(np.arange(len(_order)), np.asarray(true_coins.p)[_order], s=30, marker="_",
                 color=style.TRUTH, linewidths=2, label="true $p_i$", zorder=4)
     _ax.set(xlabel="coin (sorted by true $p$)", ylabel="$p$", ylim=(0, 1),
-            title="Each coin on its own is only loosely measured")
+            title="Observed fraction of heads and true $p$ for each coin")
     _ax.legend(loc="upper left")
     _fig
     return
@@ -129,24 +131,24 @@ def _():
     mo.md(r"""
     ## The population likelihood
 
-    The coins are independent, so the likelihood of $\Lambda$ is a product over coins of each coin's
-    **evidence** under the population, with its own $p_i$ integrated out:
+    The coins are independent, so the likelihood of $\Lambda$ is a product over coins. Each factor
+    is that coin's *evidence* under the population, with its own $p_i$ integrated out:
 
     $$
     \mathcal{L}(\Lambda) = \prod_{i=1}^{E} Z_i(\Lambda),\qquad
-    Z_i(\Lambda) = \int K(d_i\mid\theta)\,\pi(\theta\mid\Lambda)\,d\theta .
+    Z_i(\Lambda) = \int \mathcal{L}(d_i\mid\theta)\,\pi(\theta\mid\Lambda)\,d\theta .
     $$
 
     astroinfer estimates each integral by Monte Carlo, drawing $N$ coins from the population:
 
     $$
-    \hat Z_i(\Lambda) = \frac{1}{N}\sum_{j=1}^{N} K(d_i\mid\theta_{ij}),\qquad
+    \hat Z_i(\Lambda) = \frac{1}{N}\sum_{j=1}^{N} \mathcal{L}(d_i\mid\theta_{ij}),\qquad
     \theta_{ij} = F^{-1}(u_{ij};\Lambda).
     $$
 
-    The uniforms $u_{ij}$ are drawn **once** and kept fixed, which is the common-random-numbers trick
-    from notebook 4. So $\hat Z_i(\Lambda)$ is a smooth function of $\Lambda$ and NUTS can follow its
-    gradient.
+    The uniforms $u_{ij}$ are drawn once and then kept fixed (the common random numbers of
+    notebook 4), which makes $\hat Z_i(\Lambda)$ a smooth function of $\Lambda$ that NUTS can
+    differentiate.
     """)
     return
 
@@ -154,14 +156,15 @@ def _():
 @app.cell(hide_code=True)
 def _():
     mo.callout(mo.md(r"""
-    **🧩 What you implement: nothing new!** `ai.PopulationLikelihood` is built entirely from pieces
-    you already wrote:
+    **What you implement**
 
-    | argument | what it is |
+    Nothing new. `ai.PopulationLikelihood` is built from pieces you have already written:
+
+    | argument | description |
     |---|---|
-    | `measurement` | your `MeasurementProcess`; its `logpdf` gives $K(d_i\mid\theta_{ij})$ |
+    | `measurement` | your `MeasurementProcess`; its `logpdf` gives $\mathcal{L}(d_i\mid\theta_{ij})$ |
     | `data` | all observations, one `data_type` object with batch shape `(E,)` |
-    | `pop_model` | a `GenerativeModel` that draws **every** field of `parameter_type` |
+    | `pop_model` | a `GenerativeModel` that draws every field of `parameter_type` |
     | `N`, `seed` | Monte Carlo draws per event, and the seed of the fixed uniforms |
 
     The variable names in the population model must match the field names of your parameters.
@@ -174,9 +177,9 @@ def _(Lambda_true, data, flipper, mint):
     likelihood = ai.PopulationLikelihood(flipper, data, mint, N=1000, seed=0)
     L_true = {k: jnp.asarray(v) for k, v in Lambda_true.items()}
 
-    log_K = likelihood.log_kernel(L_true)                  # log K(d_i | theta_ij): shape (E, N)
+    log_like = likelihood.log_likelihood_draws(L_true)                  # log L(d_i | theta_ij): shape (E, N)
     log_Z, n_eff = likelihood.event_logpdf_and_neff(L_true)  # per coin: shape (E,), (E,)
-    mo.md(f"`log_kernel` has shape `{log_K.shape}`: one row per coin, one column per draw. "
+    mo.md(f"`log_likelihood_draws` has shape `{log_like.shape}`: one row per coin, one column per draw. "
           f"`event_logpdf_and_neff` gives $\\log\\hat Z_i$ and an effective sample size per coin.")
     return L_true, likelihood, n_eff
 
@@ -184,12 +187,12 @@ def _(Lambda_true, data, flipper, mint):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ### Is $N$ big enough? Check the effective sample size
+    ### Effective sample size
 
-    Each draw is weighted by $w_{ij} = K(d_i\mid\theta_{ij})$. If a few draws carry all the weight,
+    Each draw is weighted by $w_{ij} = \mathcal{L}(d_i\mid\theta_{ij})$. If a few draws carry all the weight,
     the estimate is noisy. The effective sample size
-    $N_\mathrm{eff} = (\sum_j w_{ij})^2 / \sum_j w_{ij}^2$ counts how many draws really contribute.
-    Coins whose data sit far from the bulk of the population get the fewest useful draws:
+    $N_\mathrm{eff} = (\sum_j w_{ij})^2 / \sum_j w_{ij}^2$ counts how many draws contribute. Coins
+    whose data sit far from the bulk of the population get the fewest useful draws:
     """)
     return
 
@@ -213,10 +216,10 @@ def _():
     mo.md(r"""
     ### Gradients and diagnostics
 
-    `likelihood.logpdf(Lambda)` is the scalar $\log\hat{\mathcal L}$. It is differentiable, so
-    `jax.value_and_grad` works on it. A quick finite-difference check is a good habit before
-    sampling. Each call also leaves a `diagnostics` dict behind, which the sampler records for every
-    draw.
+    `likelihood.logpdf(Lambda)` returns the scalar $\log\hat{\mathcal L}$. It is differentiable, so
+    `jax.value_and_grad` works on it, and it is worth comparing the gradient with finite
+    differences before sampling. Each call also stores a `diagnostics` dict, which the sampler
+    records for every draw:
     """)
     return
 
@@ -231,7 +234,7 @@ def _(L_true, likelihood):
     _diag = {k: float(v) for k, v in likelihood.diagnostics.items()}
     _symbol = {"mu": r"\mu", "sigma": r"\sigma"}
     mo.md(
-        f"$\\log\\hat{{\\mathcal L}}(\\Lambda_\\mathrm{{true}})$ = **{float(_value):.3f}**\n\n"
+        f"$\\log\\hat{{\\mathcal L}}(\\Lambda_\\mathrm{{true}})$ = {float(_value):.3f}\n\n"
         "| | `jax.grad` | finite difference |\n|---|---|---|\n"
         + "\n".join(f"| $\\partial/\\partial{_symbol[k]}$ | "
                     f"{float(_grad[k]):+.4f} | {float(_fd[k]):+.4f} |" for k in L_true)
@@ -246,9 +249,10 @@ def _():
     mo.md(r"""
     ## An exact answer to check against
 
-    This toy problem is small enough to do *exactly*: each $Z_i$ is a 1-D integral over $p$, so we
-    can compute it by brute-force quadrature on a fine grid, for every $(\mu,\sigma)$ on a grid. With
-    flat hyperpriors this gives the exact hyperposterior, which is our ground truth.
+    This problem is small enough to solve exactly. Each $Z_i$ is a one-dimensional integral over
+    $p$, so we can compute it by quadrature on a fine grid for every $(\mu,\sigma)$ on a second
+    grid. With flat hyperpriors this gives the exact hyperposterior, which we use as the reference
+    below.
     """)
     return
 
@@ -259,12 +263,12 @@ def _(N_FLIPS, data):
         """log L(mu, sigma) on a grid by quadrature over p; shape (len(sigmas), len(mus))."""
         heads = data.heads.sum(axis=-1)[:, None]                          # (E, 1)
         p = jnp.linspace(1e-4, 1 - 1e-4, n_grid)
-        log_K = heads * jnp.log(p) + (N_FLIPS - heads) * jnp.log1p(-p)   # (E, P)
-        shift = log_K.max(axis=1, keepdims=True)
+        log_like = heads * jnp.log(p) + (N_FLIPS - heads) * jnp.log1p(-p)   # (E, P)
+        shift = log_like.max(axis=1, keepdims=True)
         MU, SG = jnp.meshgrid(mus, sigmas)
         a, b = (0.0 - MU.ravel()) / SG.ravel(), (1.0 - MU.ravel()) / SG.ravel()
         prior = truncnorm.pdf(p[:, None], a, b, loc=MU.ravel(), scale=SG.ravel())  # (P, G)
-        Z = jnp.exp(log_K - shift) @ prior * (p[1] - p[0])                # (E, G)
+        Z = jnp.exp(log_like - shift) @ prior * (p[1] - p[0])                # (E, G)
         return (jnp.log(Z) + shift).sum(axis=0).reshape(MU.shape)
 
     mu_grid = jnp.linspace(0.4, 0.8, 160)
@@ -276,13 +280,13 @@ def _(N_FLIPS, data):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## How big should $N$ be? 🤔
+    ## Choosing $N$
 
-    Below are slices of $\log\hat{\mathcal L}$ for three values of $N$, against the exact curve.
-    Every curve is **smooth**, thanks to the fixed uniforms. But smooth is not the same as *right*.
-    With $N=10$ the curve is both shifted down and pulled sideways: $\log\hat Z$ is biased low when
-    $N_\mathrm{eff}$ is small, and the bias depends on $\Lambda$. The sampler would happily converge
-    to the wrong place.
+    The plots show slices of $\log\hat{\mathcal L}$ for three values of $N$, together with the
+    exact curve. All of the estimates are smooth because the uniforms are fixed, but a smooth curve
+    can still be wrong. With $N=10$ the curve is shifted down and also pulled sideways, because
+    $\log\hat Z$ is biased low when $N_\mathrm{eff}$ is small and the size of the bias depends on
+    $\Lambda$. A sampler run on this likelihood would converge to the wrong place.
     """)
     return
 
@@ -314,12 +318,12 @@ def _(Lambda_true, data, exact_log_likelihood, flipper, mint, mu_grid, sigma_gri
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## Sample the hyperposterior
+    ## Sampling the hyperposterior
 
-    Give the hyperparameters priors (numpyro distributions again) and call
-    `measurement.population_inference`. It builds the `PopulationLikelihood` for you and runs NUTS.
-    It returns the gravpop sampler; `.samples` is a DataFrame of $\Lambda$ draws, plus the
-    diagnostics recorded at every draw.
+    To sample, give the hyperparameters priors (numpyro distributions again) and call
+    `measurement.population_inference`, which builds the `PopulationLikelihood` and runs NUTS. It
+    returns the gravpop sampler, whose `.samples` is a DataFrame of $\Lambda$ draws along with the
+    diagnostics recorded at every draw:
     """)
     return
 
@@ -339,9 +343,8 @@ def _(data, flipper, mint):
 def _():
     mo.md(r"""
     `population_inference` is a convenience wrapper. The explicit version is
-    `ai.run_sampler(ai.PopulationLikelihood(...), hyper_priors, ...)`, which is the one to use once
-    you start subclassing the likelihood. Here it is, used to see what an $N=10$ analysis would have
-    told us:
+    `ai.run_sampler(ai.PopulationLikelihood(...), hyper_priors, ...)`, which you will need once you
+    start subclassing the likelihood. We use it here to run the same analysis with $N=10$:
     """)
     return
 
@@ -379,11 +382,13 @@ def _(Lambda_true, exact_grid, hyperposterior, hyperposterior_n10, mu_grid, sigm
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    The $N=1000$ hyperposterior (blue) lands on the exact contours. The $N=10$ one is confidently
-    wrong: too narrow a population, because too few draws ever land near the outlying coins.
+    The $N=1000$ hyperposterior (blue) agrees with the exact contours. The $N=10$ hyperposterior is
+    narrow and in the wrong place. It prefers too narrow a population, because too few draws land
+    near the outlying coins.
 
-    **Always look at the recorded diagnostics.** If the smallest per-coin $N_\mathrm{eff}$ along
-    the chain gets close to 1, increase $N$ or, better, sample smarter (notebook 7):
+    Always look at the recorded diagnostics. If the smallest per-coin $N_\mathrm{eff}$ along the
+    chain gets close to 1, increase $N$, or better, draw from a distribution closer to each coin's
+    likelihood (notebook 7):
     """)
     return
 
@@ -399,21 +404,21 @@ def _(hyperposterior, hyperposterior_n10):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## Recap
+    ## Summary
 
     * The population likelihood is $\prod_i Z_i(\Lambda)$ with
-      $Z_i=\int K(d_i\mid\theta)\,\pi(\theta\mid\Lambda)\,d\theta$, estimated by Monte Carlo with
-      **fixed** uniforms, so it is smooth and differentiable in $\Lambda$.
-    * `ai.PopulationLikelihood(measurement, data, pop_model, N=, seed=)` needs only your measurement
+      $Z_i=\int \mathcal{L}(d_i\mid\theta)\,\pi(\theta\mid\Lambda)\,d\theta$. Each $Z_i$ is estimated by
+      Monte Carlo with fixed uniforms, so the estimate is differentiable in $\Lambda$.
+    * `ai.PopulationLikelihood(measurement, data, pop_model, N=, seed=)` takes your measurement
       process, a batch of data with shape `(E,)`, and a `GenerativeModel`.
-    * Check it before sampling: `event_logpdf_and_neff` (is $N$ enough for every event?),
-      `jax.value_and_grad(likelihood.logpdf)`, and `diagnostics`.
-    * Sample with `measurement.population_inference(...)` or
+    * Before sampling, check $N_\mathrm{eff}$ for every event with `event_logpdf_and_neff`, and
+      check the gradient. Sample with `measurement.population_inference(...)` or
       `ai.run_sampler(likelihood, priors, ...)`.
 
-    Two more knobs, for later: `conditioned_on={...}` passes fixed values to a population with
-    `external` variables, and `likelihood_cls=` swaps in your own subclass of `PopulationLikelihood`.
-    In **notebook 6** we need exactly that: a survey that only *sees* bright stars.
+    `population_inference` has two more options that come up later. `conditioned_on={...}` passes
+    fixed values to a population with `external` variables, and `likelihood_cls=` replaces the
+    likelihood with your own subclass of `PopulationLikelihood`. Notebook 6 needs a subclass for a
+    survey that only detects bright stars.
     """)
     return
 
@@ -421,11 +426,12 @@ def _():
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## ✏️ Your turn: which press made these?
+    ## Exercise: which press made these?
 
-    Use the two-press mint from notebook 4: a fair press ($p\sim\mathcal{TN}(0.5, 0.02)$) and a
-    worn press ($\mathcal{TN}(\mu_\mathrm{worn}, 0.08)$, with $\sigma_\mathrm{worn}$ held fixed this
-    time), with a fraction $f_\mathrm{fair}$ from the fair press.
+    Use the two-press mint from notebook 4. The fair press stamps $p\sim\mathcal{TN}(0.5, 0.02)$,
+    the worn press stamps $p\sim\mathcal{TN}(\mu_\mathrm{worn}, 0.08)$ (this time
+    $\sigma_\mathrm{worn}$ is held fixed), and a fraction $f_\mathrm{fair}$ of the coins come from
+    the fair press.
 
     1. Simulate 60 coins at $f_\mathrm{fair}=0.5$, $\mu_\mathrm{worn}=0.75$, and flip each 50 times.
     2. Infer $(f_\mathrm{fair}, \mu_\mathrm{worn})$ and make a corner plot with the truth.
@@ -442,7 +448,7 @@ def _():
 
 @app.cell(hide_code=True)
 def _():
-    mo.accordion({"💡 Show a solution": mo.md(r"""
+    mo.accordion({"Show a solution": mo.md(r"""
     ```python
     from astroinfer.generative import mixture
 

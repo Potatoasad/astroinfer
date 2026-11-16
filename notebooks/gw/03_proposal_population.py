@@ -26,8 +26,8 @@ with app.setup:
         conditional,
         product,
     )
-    from astroinfer_gwmockcat import GWMockCatData, GWMockCatMeasurement, GWParams
-    from astroinfer_gwmockcat.physics import (
+    from astroinfer_gw.gwmockcat import GWMockCatData, GWMockCatMeasurement, GWParams
+    from astroinfer_gw.physics import (
         chirp_mass_from_mass_ratio,
         total_mass_from_chirp_mass,
     )
@@ -67,32 +67,31 @@ def _():
     mo.md(r"""
     # 3. Population inference with an event-informed proposal
 
-    The per-event evidence $Z_i(\Lambda)=\int K(d_i\mid\theta)\,p(\theta\mid\Lambda)\,d\theta$ is estimated
-    by importance sampling from a proposal $q_\Lambda(\theta\mid d_i)$:
+    This notebook simulates a catalog of binary mergers and infers the hyperparameters of their
+    population. The evidence of each event, $Z_i(\Lambda)=\int \mathcal{L}(d_i\mid\theta)\,p(\theta\mid\Lambda)\,d\theta$,
+    is estimated by importance sampling from a proposal $q_\Lambda(\theta\mid d_i)$:
 
     $$\hat Z_i(\Lambda)=\frac1N\sum_j \frac{K(d_i\mid\theta_{ij})\,p(\theta_{ij}\mid\Lambda)}{q_\Lambda(\theta_{ij}\mid d_i)},
     \qquad \theta_{ij}\sim q_\Lambda(\cdot\mid d_i).$$
 
-    The proposal splits $\theta$ into two blocks:
-
-    * **masses, redshift and projection factor** $(m_1, q, z, \Theta)$ are drawn from the region the data
-      $d_i$ point to;
-    * **spins** $(\chi_1,\chi_2,\cos\theta_1,\cos\theta_2)$ are drawn from the population itself,
-      $p(\cdot\mid q,\Lambda)$.
-
-    Because the spins are drawn from exactly the population conditional, they cancel in the weight and
-    are never evaluated:
+    The proposal treats two groups of parameters differently. The masses, redshift and projection
+    factor $(m_1, q, z, \Theta)$ are drawn from the region that the data $d_i$ point to. The spins
+    $(\chi_1,\chi_2,\cos\theta_1,\cos\theta_2)$ are drawn from the population itself,
+    $p(\cdot\mid q,\Lambda)$. Because the spins come from the population's own conditional
+    distribution, that factor cancels in the weight and is never evaluated:
 
     $$w_{ij} = \frac{K(d_i\mid\theta_{ij})\;p(m_1,q,z,\Theta\mid\Lambda)}{q(m_1,q,z,\Theta\mid d_i)}.$$
 
-    ($\Theta\sim U(0,1)$ in the population, so $p(\Theta)=1$; it is drawn from the data because the data
-    pin it to $\pm u_\Theta/\hat\rho\approx 0.03$, where population draws would waste ~95% of the samples.)
+    The population has $\Theta\sim U(0,1)$, so $p(\Theta)=1$. $\Theta$ is still drawn from the data,
+    because the data constrain it to about $\pm u_\Theta/\hat\rho\approx 0.03$, and draws from the
+    population would waste about 95% of the samples.
 
     The draws are a fixed function of a stored key and $\Lambda$, so $\hat Z_i(\Lambda)$ is smooth in
     $\Lambda$ and NUTS can use its gradient.
 
-    The population has a **sharp equality $\cos\theta_i\approx\chi_i$ at $q=1$ that loosens as $q$ drops**,
-    and the question is whether the analysis finds it.
+    In this population the tilt cosine equals the spin magnitude, $\cos\theta_i\approx\chi_i$, at
+    $q=1$, and the relation loosens as $q$ decreases. The notebook checks whether the inference
+    recovers this.
     """)
     return
 
@@ -100,10 +99,10 @@ def _():
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## Two population leaves
+    ## Two new population leaves
 
-    `astroinfer.generative` has truncated-normal, uniform and beta leaves. The mass and redshift sector
-    needs two more, each a `Distribution` with a closed-form CDF and quantile:
+    `astroinfer.generative` provides truncated normal, uniform and beta leaves. The masses and
+    redshift need two more, each written as a `Distribution` with a closed-form CDF and quantile:
 
     * `PowerLaw`: $p(m_1)\propto m_1^{-\alpha}$ on $[m_\mathrm{min}, m_\mathrm{max}]$;
     * `PowerLawRedshift`: $p(z)\propto \frac{dV_c}{dz}(1+z)^{\lambda-1}$ on $[0, z_\mathrm{max}]$ (Planck15),
@@ -187,13 +186,14 @@ def _():
     | sector | model |
     |---|---|
     | masses, redshift | $m_1\sim\mathrm{PL}(-\alpha)_{[5,100]}$, $q\sim\mathcal{TN}(\mu_q,\sigma_q)_{[0.05,1]}$, $z\sim\mathrm{PL}_z(\lambda)_{[0,1.5]}$ |
-    | projection factor | $\Theta\sim U(0,1)$ (as in `dev.py`) |
+    | projection factor | $\Theta\sim U(0,1)$ |
     | spin magnitudes | $\chi_i\sim\mathcal{TN}(\mu_{\chi_i},\sigma_{\chi_i})_{[0,1]}$ |
     | spin tilts | $\cos\theta_i \mid \chi_i, q \sim \mathcal{TN}\big(\chi_i,\ \sigma(q)\big)_{[-1,1]}$, $\quad\sigma(q)=\sigma_0+\sigma_1(1-q)$ |
 
     At $q=1$ the tilt equals the magnitude up to $\sigma_0$; the scatter grows linearly as $q$ drops.
 
-    The full model is assembled from **shared leaves**, so the models below agree by construction:
+    All four models below are built from the same leaf objects, so they agree with each other by
+    construction:
 
     * `pop_model`: the joint $p(\theta\mid\Lambda)$;
     * `informed_model`: the $(m_1,q,z,\Theta)$ marginal, evaluated in the weight;
@@ -244,12 +244,12 @@ def _(PowerLaw, PowerLawRedshift):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ### Explore the population
+    ### Exploring the population
 
-    Move the sliders to see how each hyperparameter shapes the population. These sliders only
-    drive the plots below: they never touch `Lambda_true`, so nothing downstream re-runs. The
-    redshift sector is fixed (at $\lambda=2$) and not shown. Each update redraws from the same
-    random key, so differences between settings come from $\Lambda$, not Monte Carlo noise.
+    The sliders set the hyperparameters of the population shown in the plots below. They do not
+    change `Lambda_true`, so nothing further down the notebook re-runs. The redshift distribution is
+    fixed at $\lambda=2$ and not shown. Each update draws from the same random key, so the
+    differences between settings come from $\Lambda$ and not from Monte Carlo noise.
     """)
     return
 
@@ -274,10 +274,10 @@ def _():
 
     _s = explore_sliders
     explore_controls = mo.hstack([
-        mo.vstack([mo.md("**masses**"), _s["alpha"], _s["mu_q"], _s["sigma_q"]]),
-        mo.vstack([mo.md("**spin magnitudes**"), _s["mu_chi_1"], _s["sigma_chi_1"],
+        mo.vstack([mo.md("#### Masses"), _s["alpha"], _s["mu_q"], _s["sigma_q"]]),
+        mo.vstack([mo.md("#### Spin magnitudes"), _s["mu_chi_1"], _s["sigma_chi_1"],
                    _s["mu_chi_2"], _s["sigma_chi_2"]]),
-        mo.vstack([mo.md(r"**tilt scatter** $\sigma(q)=\sigma_0+\sigma_1(1-q)$"),
+        mo.vstack([mo.md(r"#### Tilt scatter $\sigma(q)=\sigma_0+\sigma_1(1-q)$"),
                    _s["sigma_0"], _s["sigma_slope"]]),
     ], justify="start", gap=2)
     explore_controls
@@ -410,7 +410,7 @@ def _(explore_sample, explore_sliders, plot_population, population_figure):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## Simulate: truths $\to$ data $\to$ detection
+    ## Simulating the catalog
     """)
     return
 
@@ -427,8 +427,8 @@ def _(Lambda_true, pop_model):
     _keep = np.flatnonzero(detected)[:N_EVENTS]
     data, detected_truths = observed[_keep], truths[_keep]
 
-    mo.md(f"**{detected.sum():,}** of {N_TRUTHS:,} sources are detected; the analysis uses the first "
-          f"**{len(_keep)}**. Their observed SNRs span {float(data.snr.min()):.1f} to "
+    mo.md(f"{detected.sum():,} of {N_TRUTHS:,} sources are detected, and the analysis uses the first "
+          f"{len(_keep)}. Their observed SNRs span {float(data.snr.min()):.1f} to "
           f"{float(data.snr.max()):.1f} (median {float(jnp.median(data.snr)):.1f}).")
     return data, detected_truths, measurement, trigger, truths
 
@@ -436,8 +436,8 @@ def _(Lambda_true, pop_model):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    The structure we are looking for, in the true population: tilt against magnitude, for near-equal
-    and unequal mass ratios.
+    The plots show the tilt cosine against the spin magnitude in the true population, for
+    near-equal and for unequal mass ratios.
     """)
     return
 
@@ -465,24 +465,28 @@ def _():
     mo.md(r"""
     ## The proposal
 
-    For one event, the data fix a region in $(m_1, q, z, \Theta)$. With $w=1/\hat\rho$ as in the
-    measurement model:
+    For one event, the data restrict $(m_1, q, z, \Theta)$ to a small region. With $w=1/\hat\rho$, as in
+    the measurement model, the proposal draws:
 
-    * $\Theta\sim\mathcal{TN}(\hat\Theta,\ k_\Theta u_\Theta w)_{[0,1]}$: the projection factor is observed directly;
-    * $\ln\mathcal{M}_\mathrm{det}\sim\mathcal N(\ln\hat{\mathcal M}_\mathrm{det},\ k_\mathcal{M}\,u_\mathcal{M}w)$:
-      so is the chirp mass;
-    * $q\sim U\big(q(\hat\eta - k_\eta u_\eta w),\ q(\hat\eta + k_\eta u_\eta w)\big)$: invert the symmetric
-      mass ratio over a $\pm k_\eta\sigma$ window (wide near $q=1$, where $\eta$ is flat);
+    * $\Theta\sim\mathcal{TN}(\hat\Theta,\ k_\Theta u_\Theta w)_{[0,1]}$, because the projection factor
+      is observed directly;
+    * $\ln\mathcal{M}_\mathrm{det}\sim\mathcal N(\ln\hat{\mathcal M}_\mathrm{det},\ k_\mathcal{M}\,u_\mathcal{M}w)$,
+      because the chirp mass is also observed directly;
+    * $q\sim U\big(q(\hat\eta - k_\eta u_\eta w),\ q(\hat\eta + k_\eta u_\eta w)\big)$, by inverting the
+      symmetric mass ratio over a window of $\pm k_\eta$ standard deviations, which is wide near
+      $q=1$, where $\eta$ is flat;
     * $\ln z\mid\Theta\sim\mathcal N(\ln\hat z(\Theta),\ k_z/\hat\rho)$, where $\hat z(\Theta)$ solves
-      $\rho_\mathrm{opt}(\mathcal M_\mathrm{det}, q, d_L(z))\,\Theta=\hat\rho$: centred on the *drawn* $\Theta$,
-      so the proposal follows the SNR-$\Theta$-distance ridge.
+      $\rho_\mathrm{opt}(\mathcal M_\mathrm{det}, q, d_L(z))\,\Theta=\hat\rho$. This is centred on the
+      drawn value of $\Theta$, so the proposal follows the ridge between the SNR, $\Theta$ and the
+      distance.
 
-    Then $m_1=\mathcal M_\mathrm{det}/\big[(1+z)\,c(q)\big]$, and $\log q(m_1,q,z,\Theta\mid d)$ includes that
-    Jacobian. Finally $\vec\chi\sim p(\cdot\mid q,\Lambda)$ from `spin_model`, with its own key so the
-    draws are common across $\Lambda$.
+    From these, $m_1=\mathcal M_\mathrm{det}/\big[(1+z)\,c(q)\big]$, and $\log q(m_1,q,z,\Theta\mid d)$
+    includes the Jacobian of that transformation. Finally the spins are drawn from `spin_model`,
+    $\vec\chi\sim p(\cdot\mid q,\Lambda)$, with a separate key, so that they are also common random
+    numbers across $\Lambda$.
 
-    It is a `Proposal`: a measurement process run backwards, whose `parameter_type` is the data and whose
-    `data_type` is $\theta$.
+    The proposal is a `Proposal`, a measurement process run backwards: its `parameter_type` is the
+    data class and its `data_type` is the parameter class.
     """)
     return
 
@@ -573,23 +577,24 @@ def _():
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## The likelihood, with selection
+    ## The likelihood with selection
 
-    `PopulationLikelihood.log_weights` is overridden with the cancelled weight. Detection depends on
-    $(m_1,q,z,\Theta)$ only and $p(\Theta)$ has no hyperparameters, so the selection term needs only the
-    mass sector:
+    The likelihood subclasses `PopulationLikelihood` and overrides `log_weights` with the weight
+    above, in which the spin factor cancels. Detection depends only on $(m_1,q,z,\Theta)$, and
+    $p(\Theta)$ has no hyperparameters, so the selection term needs only the mass and redshift model:
 
     $$\ln\mathcal L(\Lambda)=\sum_i\ln\hat Z_i(\Lambda) - N_\mathrm{events}\ln\hat\alpha(\Lambda),\qquad
     \hat\alpha(\Lambda)=\frac{1}{N_\mathrm{inj}}\sum_{\mathrm{found}}\frac{p(m_1,q,z\mid\Lambda)}{g(m_1,q,z)},$$
 
-    with injections drawn from the same mass model at broader hyperparameters $g$.
+    The injections are drawn from the same mass model with broader hyperparameters, and $g$ is their
+    density.
     """)
     return
 
 
 @app.class_definition
 class CancelledSpinLikelihood(ai.PopulationLikelihood):
-    """log w = log K + log p(m1, q, z, Theta | Lambda) - log q(m1, q, z, Theta | d); the spins
+    """log w = log L + log p(m1, q, z, Theta | Lambda) - log q(m1, q, z, Theta | d); the spins
     cancel. logpdf adds the selection term -E log alpha(Lambda)."""
 
     def __init__(self, *args, informed_model, mass_model, injections, injection_log_prob,
@@ -603,7 +608,7 @@ class CancelledSpinLikelihood(ai.PopulationLikelihood):
     def log_weights(self, Lambda):
         theta = self.proposal_draws(Lambda)
         d = self.data.reshape_batch((self.E, 1))
-        return (self.log_kernel_at(theta)
+        return (self.log_likelihood_at(theta)
                 + self.informed_model.log_prob(theta.to_dict(), Lambda)
                 - self.proposal.log_q_informed(theta, d))
 
@@ -630,7 +635,7 @@ def _(Lambda_true, mass_model, measurement, pop_model, trigger):
     found_injections = {k: jnp.asarray(_draws[k])[_found] for k in MASS_VARS}
     injection_log_prob = mass_model.log_prob(found_injections, Lambda_injection)
 
-    mo.md(f"**{_found.sum():,}** of {N_INJECTIONS:,} injections are found.")
+    mo.md(f"{_found.sum():,} of {N_INJECTIONS:,} injections are found.")
     return found_injections, injection_log_prob
 
 
@@ -664,8 +669,8 @@ def _():
     mo.md(r"""
     ## Checks at the true $\Lambda$
 
-    The effective sample size per event, and the Monte Carlo scatter of $\ln\mathcal L$ between two
-    independent proposal keys.
+    Before sampling, we check the effective sample size of each event at the true $\Lambda$, and the
+    Monte Carlo scatter of $\ln\mathcal L$ between two independent proposal keys.
     """)
     return
 
@@ -685,11 +690,12 @@ def _(Lambda_true, likelihood, make_likelihood):
 
     mo.vstack([
         mo.md(
-            f"Out of {N_DRAWS:,} draws per event: median $N_\\mathrm{{eff}}$ = "
-            f"**{float(jnp.median(n_eff_true)):.0f}**, minimum **{float(n_eff_true.min()):.1f}**. "
+            f"Out of {N_DRAWS:,} draws per event, the median $N_\\mathrm{{eff}}$ is "
+            f"{float(jnp.median(n_eff_true)):.0f} and the minimum is {float(n_eff_true.min()):.1f}. "
             f"Two proposal keys give $\\sum_i\\ln\\hat Z_i$ = {float(_lp.sum()):.2f} and "
-            f"{float(_lp_other.sum()):.2f}. Selection: $N_\\mathrm{{eff}}$ = {float(_n_eff_sel):,.0f} "
-            f"(want $\\gg 4N_\\mathrm{{events}}$ = {4 * N_EVENTS})."),
+            f"{float(_lp_other.sum()):.2f}. The selection term has $N_\\mathrm{{eff}}$ = "
+            f"{float(_n_eff_sel):,.0f}, which should be much larger than "
+            f"$4N_\\mathrm{{events}}$ = {4 * N_EVENTS}."),
         _fig,
     ])
     return
@@ -700,8 +706,8 @@ def _():
     mo.md(r"""
     ## Hyperparameter inference
 
-    Saved samples in `data/proposal_population/` are loaded; tick the box to re-run (about 15-20 minutes
-    on a laptop CPU).
+    Samples saved in `notebooks/data/proposal_population/` are loaded if they exist. Tick the box to
+    re-run the sampler, which takes about 15 to 20 minutes on a laptop CPU.
     """)
     return
 
@@ -740,10 +746,9 @@ def _(force_run, hyper_priors, likelihood):
 @app.cell
 def _(hyperposterior):
     mo.md(f"""
-    Monte Carlo health along the chain: the smallest per-event $N_\\mathrm{{eff}}$ has median
-    **{hyperposterior['N_eff_min'].median():.1f}** (lowest {hyperposterior['N_eff_min'].min():.1f});
-    the selection $N_\\mathrm{{eff}}$ never drops below
-    **{hyperposterior['N_eff_selection'].min():,.0f}**.
+    Along the chain, the smallest per-event $N_\\mathrm{{eff}}$ has a median of
+    {hyperposterior['N_eff_min'].median():.1f} and a minimum of {hyperposterior['N_eff_min'].min():.1f}.
+    The smallest selection $N_\\mathrm{{eff}}$ is {hyperposterior['N_eff_selection'].min():,.0f}.
     """)
     return
 
@@ -785,10 +790,11 @@ def _(Lambda_true, hyperposterior):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ### The tilt–magnitude scatter $\sigma(q)$
+    ### The tilt scatter $\sigma(q)$
 
-    The inferred $\sigma(q)=\sigma_0+\sigma_1(1-q)$ (median and 90% band) against the truth. The points
-    are the detected events' true $|\cos\theta_1-\chi_1|$ and $|\cos\theta_2-\chi_2|$, for orientation.
+    The plot shows the inferred $\sigma(q)=\sigma_0+\sigma_1(1-q)$, its median and 90% band, against
+    the true curve. The points are the true values of $|\cos\theta_1-\chi_1|$ and
+    $|\cos\theta_2-\chi_2|$ for the detected events.
     """)
     return
 
@@ -827,13 +833,14 @@ def _():
     mo.md(r"""
     ## Population predictive distribution
 
-    The population averaged over the hyperposterior, on the same panels as the explorer above:
-    for 200 hyperposterior draws, 5,000 sources each. The 1D panels and $\sigma(q)$ show the median
-    and 90% band across draws (the band includes a little Monte Carlo noise from the 5,000 per
-    draw); the 2D panels show the 50% and 90% contours of all draws pooled.
+    These panels show the population averaged over the hyperposterior, on the same axes as the
+    explorer above, using 200 hyperposterior draws with 5,000 sources each. The one-dimensional
+    panels and $\sigma(q)$ show the median and 90% band across draws. The band includes some Monte
+    Carlo noise from using 5,000 sources per draw. The two-dimensional panels show the 50% and 90%
+    contours of all draws pooled together.
 
-    The grey reference is the explorer population, driven by the same sliders (shown again here).
-    They start at the true values, so by default grey is the truth; move them to compare.
+    The grey reference is the population set by the sliders, which are shown again here. They start
+    at the true values, so by default the grey reference is the true population.
     """)
     return
 

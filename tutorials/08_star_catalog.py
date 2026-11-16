@@ -46,22 +46,20 @@ with app.setup:
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    # 8 · The star catalog 🗂️
+    # 8. The star catalog
 
-    In notebooks 6 and 7 the population likelihood went straight from the *data* $d_i$ to $\Lambda$,
-    re-evaluating $K(d_i\mid\theta)$ at every step. Real surveys rarely work that way. Each event gets
-    its own (expensive) parameter estimation **once**; the posteriors are stored, shared and reused
-    by many population analyses.
+    In notebooks 6 and 7 the population likelihood went straight from the data $d_i$ to $\Lambda$,
+    re-evaluating $\mathcal{L}(d_i\mid\theta)$ at every step. Real surveys rarely work that way. Parameter
+    estimation is expensive, so it is run once per event, and the posteriors are stored and shared
+    between many population analyses.
 
-    `ai.Catalog` is that store:
+    `ai.Catalog` stores them. A catalog holds one `PosteriorData` per *event*, along with metadata.
+    It exports the posteriors as an event-major *data product*, `{column: (E, N), "prior": (E, N)}`,
+    and it saves itself to a folder and loads itself back. It can also carry compressed
+    *representations* of the posteriors, which are the subject of notebook 9.
 
-    * it holds one `PosteriorData` per **event**, with metadata,
-    * it exports them as an event-major **data product**, `{column: (E, N), "prior": (E, N)}`,
-    * it **saves** and **loads** itself from a folder,
-    * and it can carry compressed **representations** of the posteriors (notebook 9).
-
-    By the end we will rerun the survey's population inference from the catalog alone, without
-    touching the telescope again.
+    At the end of this notebook we rerun the survey's population inference using only the catalog,
+    without simulating the telescope again.
     """)
     return
 
@@ -69,10 +67,11 @@ def _():
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## The survey, unchanged from notebook 6
+    ## The survey
 
-    Stars have a luminosity and a distance; the telescope measures a noisy flux and a noisy parallax;
-    only stars with an observed $\log_{10}\hat F > -0.3$ are detected. The population is a truncated
+    The survey is the one from notebook 6. Stars have a luminosity and a distance, the telescope
+    measures a noisy flux and a noisy parallax, and only stars with an observed
+    $\log_{10}\hat F > -0.3$ are detected. The population is a truncated
     normal in $\log_{10}L$ and uniform-in-volume distances, $p(r)\propto r^2$.
     """)
     return
@@ -158,26 +157,28 @@ def _():
     idx = np.flatnonzero(det)[:N_EVENTS]
     data, true_det = obs[idx], stars[idx]
 
-    mo.md(f"**{det.sum():,}** of {len(det):,} simulated stars are detected; we run PE on the first "
-          f"**{len(idx)}**.")
+    mo.md(f"{det.sum():,} of {len(det):,} simulated stars are detected. We run PE on the first "
+          f"{len(idx)}.")
     return Lambda_true, data, pop_model, telescope, trigger, true_det
 
 
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## Step 1 · PE for every detected star, into a `Catalog`
+    ## Building the catalog
 
     `telescope.PE(d, priors, as_posterior=True)` returns a `PosteriorData` (notebook 3). It records
-    the PE prior density of every draw as `prior`, plus one `log_prior[...]` factor per parameter;
-    the catalog needs those later.
+    the PE prior density of every draw as `prior`, plus one `log_prior[...]` factor per parameter.
+    The catalog uses both later on.
 
-    A catalog is created with a `RawSamples` setting that says which columns its data product exports
-    and how many draws per event (`N`). Then each posterior goes in with `add_event(name, posterior)`.
-    Anything else you want to keep with an event, like the injected truth, goes in `metadata=`.
+    A catalog is created with a `RawSamples` setting, which says which columns the data product
+    exports and how many draws it keeps per event (`N`). Each posterior is then added with
+    `add_event(name, posterior)`. Anything else you want to keep with an event, such as the injected
+    truth, goes in `metadata=`.
 
-    PE takes about half a second per star. The catalog is saved to `tutorials/data/star_catalog`; if
-    that folder exists it is **loaded** instead, unless you tick the box.
+    PE takes about half a second per star. The catalog is saved to `tutorials/data/star_catalog`. If
+    that folder already exists, the cell below loads it instead of rerunning PE, unless you tick the
+    box.
     """)
     return
 
@@ -209,9 +210,9 @@ def _(data, force_pe, pe_priors, telescope, true_det):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    Expand the catalog: it lists its representations (just `raw` for now), every event, and every
-    posterior. A catalog behaves like a read-only dict of posteriors:
-    `catalog.eventnames`, `len(catalog)`, `"star_03" in catalog`, and `catalog["star_03"]`.
+    The expanded catalog lists its representations (only `raw` so far), its events, and their
+    posteriors. A catalog behaves like a read-only dict of posteriors, so `catalog.eventnames`,
+    `len(catalog)`, `"star_03" in catalog` and `catalog["star_03"]` all work.
     """)
     return
 
@@ -238,10 +239,11 @@ def _(catalog, event):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## Step 2 · The data product
+    ## The data product
 
-    `catalog.dataproduct()` turns the catalog into arrays a population likelihood can consume:
-    every event is resampled to the same `N` draws and stacked, **event-major**.
+    `catalog.dataproduct()` turns the catalog into arrays that a population likelihood can use.
+    Every event is resampled to the same number of draws `N`, and the events are stacked along the
+    first axis:
     """)
     return
 
@@ -258,17 +260,17 @@ def _(catalog):
 
 @app.cell(hide_code=True)
 def _():
-    mo.callout(mo.md(r"""
-    **📦 What is in `"prior"`?** It is the PE prior density $\pi(\theta_{ij})$ of each exported draw,
-    for the **exported columns only**. If you export a subset of the parameters, the catalog
-    multiplies just their `log_prior[...]` factors (the others are marginalised out). That is why PE
-    stores one factor per parameter. Here both priors are uniform, so `prior` is the constant
-    $\frac{1}{8}\cdot\frac{1}{1.5}\approx 0.083$.
+    mo.md(r"""
+    The `prior` array holds the PE prior density $\pi(\theta_{ij})$ of each exported draw, counting
+    only the exported columns. If you export a subset of the parameters, the catalog multiplies
+    together the `log_prior[...]` factors of those parameters and leaves out the others, which are
+    marginalised over. This is why PE stores one factor per parameter. Both priors here are
+    uniform, so `prior` is the constant $\frac{1}{8}\cdot\frac{1}{1.5}\approx 0.083$.
 
-    **🎲 Reproducible resampling.** Each event's resampling seed comes from the catalog seed and the
-    event's *name*. Asking for a subset of events, or adding events, never changes the draws of the
-    others.
-    """), kind="info")
+    The resampling seed for each event is derived from the catalog seed and the event's name. As a
+    result, asking for a subset of events, or adding new events, does not change the draws of the
+    other events:
+    """)
     return
 
 
@@ -280,7 +282,7 @@ def _(catalog, product_raw):
     mo.md(f"""
     * `prior` is constant: min = {float(product_raw["prior"].min()):.4f},
       max = {float(product_raw["prior"].max()):.4f}.
-    * `{_name}` exported alone gives the same draws as in the full product: **{_same}**.
+    * `{_name}` exported alone gives the same draws as in the full product: `{_same}`.
     * `catalog.dataproduct(N=200)` changes only the number of draws:
       `{tuple(catalog.dataproduct(N=200)["log_L"].shape)}`.
     """)
@@ -290,10 +292,10 @@ def _(catalog, product_raw):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## Step 3 · Saving and loading
+    ## Saving and loading
 
-    Saving is always explicit: `catalog.save(root)`. Nothing is written behind your back. Saving to
-    the same folder again only rewrites what changed. Here is what is on disk:
+    A catalog is only written to disk when you call `catalog.save(root)`. Saving to the same folder
+    again rewrites only the parts that changed. Here are the files on disk:
     """)
     return
 
@@ -309,20 +311,19 @@ def _(catalog):
 
 @app.cell(hide_code=True)
 def _():
-    mo.callout(mo.md(r"""
-    **🔑 Classes defined in a notebook need `types=`.** Each saved posterior records the *import path*
-    of its parameter class, for example `__main__:Star`. A class written in a notebook cell cannot be
-    imported back from that path in another session (or another script), so give `Catalog.load`
-    the classes to use:
+    mo.md(r"""
+    Each saved posterior records the import path of its parameter class, for example
+    `__main__:Star`. A class defined in a notebook cell cannot be imported from that path in another
+    session or script, so you have to pass the classes to `Catalog.load` with `types=`:
 
     ```python
     catalog = ai.Catalog.load(CATALOG_DIR, types=[Star, StarObservation])
     ```
 
-    `StarObservation` is needed too, because each posterior also stores the observation $d$ it came
-    from (`posterior.observed_data`). Classes that live in an installed package (like
-    `astroinfer_gwmockcat.GWParams`) are found automatically.
-    """), kind="info")
+    `StarObservation` is needed too, because each posterior also stores the observation $d$ it was
+    computed from (`posterior.observed_data`). Classes that live in an installed package, such as
+    `astroinfer_gw.gwmockcat.GWParams`, are found automatically.
+    """)
     return
 
 
@@ -349,13 +350,13 @@ def _(catalog):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## Step 4 · Every posterior has a fingerprint
+    ## Source keys
 
-    `catalog.source_key(name)` is a SHA-256 hash of the event's posterior draws. Replace a posterior
-    (`add_event(name, new_posterior, overwrite=True)`) and its key changes. In notebook 9 this is what
-    tells the catalog that a compressed fit of that event is out of date.
+    `catalog.source_key(name)` is a SHA-256 hash of an event's posterior draws. If you replace a
+    posterior with `add_event(name, new_posterior, overwrite=True)`, its key changes. In notebook 9
+    the catalog uses this key to tell when a compressed fit of an event is out of date.
 
-    We try it on a *copy* loaded from disk, so the catalog above is untouched.
+    We try this on a copy loaded from disk, so that the catalog above is left as it is:
     """)
     return
 
@@ -381,36 +382,36 @@ def _(catalog, data, pe_priors, telescope):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## Step 5 · Population inference from the catalog alone
+    ## Population inference from the catalog
 
-    The posterior draws $\theta_{ij}\sim p(\theta\mid d_i)$ already encode $K(d_i\mid\theta)$, up to
-    the PE prior they were drawn with:
-    $p(\theta\mid d_i)\propto K(d_i\mid\theta)\,\pi(\theta)$. So the per-event evidence under the
-    population is an average over the **stored** draws, reweighted from the PE prior to the
+    The posterior draws $\theta_{ij}\sim p(\theta\mid d_i)$ already contain $\mathcal{L}(d_i\mid\theta)$,
+    multiplied by the PE prior they were drawn with,
+    $p(\theta\mid d_i)\propto \mathcal{L}(d_i\mid\theta)\,\pi(\theta)$. The evidence of each event under the
+    population is therefore an average over the stored draws, reweighted from the PE prior to the
     population:
 
     $$
-    Z_i(\Lambda)=\int K(d_i\mid\theta)\,p(\theta\mid\Lambda)\,d\theta
+    Z_i(\Lambda)=\int \mathcal{L}(d_i\mid\theta)\,p(\theta\mid\Lambda)\,d\theta
     \;\propto\;\frac{1}{N}\sum_{j=1}^{N}\frac{p(\theta_{ij}\mid\Lambda)}{\pi(\theta_{ij})}.
     $$
 
-    The data product has exactly the three arrays this needs: the draws, and `prior` $=\pi$. Add the
-    selection term $-E\ln\alpha(\Lambda)$ from notebook 6 (same injections, same estimator), and the
-    whole likelihood is a dozen lines. Any object with a `.logpdf(Lambda)` method can be handed to
-    `ai.run_sampler`.
+    The data product contains the arrays this needs: the draws, and `prior`, which is $\pi$. With
+    the selection term $-E\ln\alpha(\Lambda)$ from notebook 6 added (same injections, same
+    estimator), the likelihood class below is about a dozen lines long. `ai.run_sampler` accepts any
+    object that has a `.logpdf(Lambda)` method.
     """)
     return
 
 
 @app.cell
 def _(pop_model, telescope, trigger):
-    # Injections for the selection term, exactly as in notebook 6.
+    # Injections for the selection term, as in notebook 6.
     Lg = dict(mu_L=0.5, sigma_L=1.5)
     inj = pop_model.sample(Lg, key=jax.random.key(5), shape=(50000,))
     found = trigger.detect(telescope.sample(Star.from_dict(inj), key=6), np.random.default_rng(7))
     inj_found = {k: jnp.asarray(v)[found] for k, v in inj.items()}
     log_g = pop_model.log_prob(inj_found, Lg)
-    mo.md(f"**{found.sum():,}** of 50,000 injections are found.")
+    mo.md(f"{found.sum():,} of 50,000 injections are found.")
     return inj_found, log_g
 
 
@@ -442,10 +443,10 @@ class RecycledLikelihood:
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    Before sampling, check the Monte Carlo at the true $\Lambda$. The effective number of draws per
-    event, $N_\mathrm{eff}=(\sum_j w_{ij})^2/\sum_j w_{ij}^2$, should be comfortably above 1 for every
-    event; if it is not, that event's $Z_i$ is noisy and you need more draws (or a better
-    representation).
+    Before sampling, we check the Monte Carlo sums at the true $\Lambda$. The effective number of
+    draws per event, $N_\mathrm{eff}=(\sum_j w_{ij})^2/\sum_j w_{ij}^2$, should be well above 1 for
+    every event. If it is not, that event's $Z_i$ is noisy, and you need more draws or a better
+    representation.
     """)
     return
 
@@ -484,14 +485,15 @@ def _(Lambda_true, hyper_naive, hyper_selected):
         truths=Lambda_true, ranges=dict(mu_L=(-2.0, 1.2), sigma_L=(0.1, 1.6)), size=2.6,
         names=["with selection", "without selection"])
     mo.vstack([
-        mo.md("### The hyperposterior, from stored posteriors only"),
+        mo.md("### The hyperposterior from stored posteriors"),
         _fig,
         mo.md(f"With selection: $\\mu_L$ = {hyper_selected.mu_L.median():.2f} "
               f"(90%: {hyper_selected.mu_L.quantile(0.05):.2f} to {hyper_selected.mu_L.quantile(0.95):.2f}), "
               f"$\\sigma_L$ = {hyper_selected.sigma_L.median():.2f}. Truth: 0 and 0.7. "
-              "Without the selection term the bright-star bias of notebook 6 is back. With 40 stars "
-              "the corrected answer is broad and leans along a ridge: we only ever see the bright "
-              "tail, which a low $\\mu_L$ with a wide $\\sigma_L$ explains almost as well."),
+              "Without the selection term, the bias towards bright stars from notebook 6 returns. "
+              "With 40 stars the corrected posterior is broad and stretched along a ridge, because "
+              "we only see the bright tail, and a low $\\mu_L$ with a wide $\\sigma_L$ explains it "
+              "almost as well."),
     ])
     return
 
@@ -499,21 +501,20 @@ def _(Lambda_true, hyper_naive, hyper_selected):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## Recap
+    ## Summary
 
-    * `ai.Catalog(raw=ai.RawSamples(columns=[...], N=...))` stores one `PosteriorData` per event;
-      `add_event(name, posterior, metadata=...)` adds one, `overwrite=True` replaces it.
-    * `catalog.dataproduct()` gives `{column: (E, N), "prior": (E, N)}`; `prior` is the PE prior of
-      the exported columns, and each event's resampling depends only on its name.
-    * `catalog.save(root)` is explicit and incremental; `ai.Catalog.load(root, types=[...])` needs the
+    * `ai.Catalog(raw=ai.RawSamples(columns=[...], N=...))` stores one `PosteriorData` per event.
+      `add_event(name, posterior, metadata=...)` adds an event, and `overwrite=True` replaces one.
+    * `catalog.dataproduct()` returns `{column: (E, N), "prior": (E, N)}`, where `prior` is the PE
+      prior of the exported columns. Each event's resampling depends only on its name.
+    * `catalog.save(root)` writes only what changed. `ai.Catalog.load(root, types=[...])` needs the
       classes you defined in the notebook.
-    * `catalog.source_key(name)` fingerprints each posterior.
-    * Population inference from stored posteriors is a reweighting,
+    * Population inference from stored posteriors reweights the draws,
       $Z_i\propto\langle p(\theta\mid\Lambda)/\pi(\theta)\rangle_{\theta\sim p(\theta\mid d_i)}$, and
-      anything with `.logpdf(Lambda)` runs in `ai.run_sampler`.
+      `ai.run_sampler` runs any object with a `.logpdf(Lambda)` method.
 
-    Raw draws are not the only way to hand a posterior to a population analysis. In **notebook 9**
-    you will write your own compressed *representation* and plug it into the catalog.
+    Raw draws are one way to pass a posterior to a population analysis. In notebook 9 you write a
+    compressed representation of your own and add it to the catalog.
     """)
     return
 
@@ -521,18 +522,20 @@ def _():
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## ✏️ Your turn: grow the catalog
+    ## Exercise: a bigger catalog
 
     The survey detected far more than 40 stars.
 
-    1. Load the saved catalog into a new variable, run PE on detected stars 40 to 79 and
-       `add_event` them (`star_40`, ...). Save it to a *new* folder, say
+    1. Load the saved catalog into a new variable, run PE on detected stars 40 to 79 and add them
+       with `add_event` (`star_40`, ...). Save the result to a new folder, for example
        `tutorials/data/star_catalog_80`.
     2. Re-run the population inference (with selection) on the 80-star data product.
-    3. Compare the 40- and 80-star hyperposteriors in a corner plot. Which part tightens, and which
-       part barely moves? Did the old 40 events' draws in the data product change?
+    3. Compare the 40-star and 80-star hyperposteriors in a corner plot. Which part of the
+       posterior tightens, and which part hardly changes? Did the draws of the original 40 events in
+       the data product change?
 
-    Hint: `data` and `true_det` only hold the first 40 detections; re-slice `obs[det]`.
+    Hint: `data` and `true_det` only hold the first 40 detections, so you need to re-slice
+    `obs[det]`.
     """)
     return
 
@@ -545,7 +548,7 @@ def _():
 
 @app.cell(hide_code=True)
 def _():
-    mo.accordion({"💡 Show a solution": mo.md(r"""
+    mo.accordion({"Show a solution": mo.md(r"""
     ```python
     # Re-create the simulation from above, keeping 80 detections this time.
     _stars = Star.from_dict(pop_model.sample(Lambda_true, key=jax.random.key(0), shape=(5000,)))
@@ -569,10 +572,10 @@ def _():
                              num_samples=2000, summary=False).samples
     style.corner([hyper_selected, hyper80], ["mu_L", "sigma_L"], truths=Lambda_true,
                  ranges=dict(mu_L=(-2.0, 1.2), sigma_L=(0.1, 1.6)))
-    # The bulk near the truth tightens, but the long tail along the ridge (low mu_L with wide
-    # sigma_L) barely shrinks: we only ever see the bright tail of the luminosity function.
+    # The bulk near the truth tightens, but the tail along the ridge (low mu_L with wide sigma_L)
+    # hardly shrinks, because we only see the bright end of the luminosity function.
 
-    # Seeds depend on event names only, so the first 40 rows are unchanged:
+    # Seeds depend only on the event names, so the first 40 rows are unchanged.
     print(bool(jnp.all(big_product["log_L"][:40] == product_raw["log_L"])))
     ```
     """)})

@@ -1,12 +1,12 @@
 """Likelihood objects in the ``.logpdf(params)`` form ``gravpop.Sampler`` expects.
 
-    FixedDataLikelihood   L(theta)  = K(d | theta)                  single-event PE
-    PopulationLikelihood  L(Lambda) = prod_i  E_{theta~p(.|Lambda)} K(d_i | theta)
+    FixedDataLikelihood   L(d | theta) for fixed d, a function of theta  single-event PE
+    PopulationLikelihood  L(Lambda) = prod_i  E_{theta~p(.|Lambda)} L(d_i | theta)
 
 With a Proposal q_Lambda(theta | d), the per-event integral is estimated by
 importance sampling instead:
 
-    Z_i(Lambda) ~= (1/N) sum_j  K(d_i | theta_ij) p(theta_ij | Lambda)
+    Z_i(Lambda) ~= (1/N) sum_j  L(d_i | theta_ij) p(theta_ij | Lambda)
                                 / q_Lambda(theta_ij | d_i),
     theta_ij ~ q_Lambda(. | d_i)
 """
@@ -19,7 +19,7 @@ from ..parameters import coerce
 
 
 class FixedDataLikelihood:
-    """L(theta) = K(d | theta) for fixed data d, in the form gp.Sampler expects."""
+    """L(d | theta) as a function of theta, for fixed data d, in the form gp.Sampler expects."""
 
     def __init__(self, measurement, d):
         self.measurement = measurement
@@ -33,7 +33,7 @@ class PopulationLikelihood:
     """
     Population-marginalized likelihood for independent observations.
 
-    K(d | theta) is provided by MeasurementProcess.
+    L(d | theta) is provided by MeasurementProcess.
     p(theta | Lambda) is provided by GenerativeModel.
 
     Uses fixed base random numbers for differentiable
@@ -42,7 +42,7 @@ class PopulationLikelihood:
     proposal:
         Optional Proposal q_Lambda(theta | d). If given, draws come from q
         with a fixed key and are importance-weighted by p / q. If None,
-        draws come from p itself (weights are just K).
+        draws come from p itself (weights are just L).
 
     ``log_weights(Lambda)`` -> (E, N) is the single override point: subclass
     and replace it to use a different weight, e.g. one where factors shared
@@ -186,29 +186,29 @@ class PopulationLikelihood:
             self.data, self.key, N=self.N, Lambda=Lambda
         )
 
-    def log_kernel_at(self, theta):
-        """log K(d_i | theta_ij) for draws theta of batch shape (E, N)."""
+    def log_likelihood_at(self, theta):
+        """log L(d_i | theta_ij) for draws theta of batch shape (E, N)."""
         return self.measurement.logpdf(self._data_for_samples, theta)
 
-    def log_kernel(self, Lambda):
-        """log K(d_i | theta_ij) at population draws, shape (E, N)."""
-        return self.log_kernel_at(self.population_draws(Lambda))
+    def log_likelihood_draws(self, Lambda):
+        """log L(d_i | theta_ij) at population draws, shape (E, N)."""
+        return self.log_likelihood_at(self.population_draws(Lambda))
 
     def log_weights(self, Lambda):
         """
         Log importance weights, shape (E, N); Z_i is their mean.
 
         Default:
-            no proposal : log K(d_i | theta_ij),                theta ~ p
-            proposal    : log K + log p(theta | Lambda) - log q, theta ~ q
+            no proposal : log L(d_i | theta_ij),                theta ~ p
+            proposal    : log L + log p(theta | Lambda) - log q, theta ~ q
 
         Override in a subclass for a custom weight. Example: q draws masses
         from an event-informed q(m, z | d) and spins from the population's
         own p(s | m, z, Lambda); that conditional then cancels, leaving
-        log K + log p(m, z | Lambda) - log q(m, z | d).
+        log L + log p(m, z | Lambda) - log q(m, z | d).
         """
         if self.proposal is None:
-            return self.log_kernel(Lambda)
+            return self.log_likelihood_draws(Lambda)
 
         if self.pop_model.external:
             raise ValueError(
@@ -223,7 +223,7 @@ class PopulationLikelihood:
             theta, self._data_for_samples, Lambda=Lambda
         )
         log_p = self.pop_model.log_prob(theta.to_dict(), Lambda)
-        return self.log_kernel_at(theta) + log_p - log_q
+        return self.log_likelihood_at(theta) + log_p - log_q
 
     def event_logpdf_and_neff(self, Lambda):
         """

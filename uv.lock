@@ -16,7 +16,7 @@ resolution-markers = [
 [manifest]
 members = [
     "astroinfer",
-    "astroinfer-gwmockcat",
+    "astroinfer-gw",
     "astroinfer-tgmm",
     "astroinfer-workspace",
 ]
@@ -48,8 +48,8 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
-gwmockcat = [
-    { name = "astroinfer-gwmockcat" },
+gw = [
+    { name = "astroinfer-gw" },
 ]
 marimo = [
     { name = "marimo" },
@@ -60,7 +60,7 @@ tgmm = [
 
 [package.metadata]
 requires-dist = [
-    { name = "astroinfer-gwmockcat", marker = "extra == 'gwmockcat'", editable = "packages/astroinfer-gwmockcat" },
+    { name = "astroinfer-gw", marker = "extra == 'gw'", editable = "packages/astroinfer-gw" },
     { name = "astroinfer-tgmm", marker = "extra == 'tgmm'", editable = "packages/astroinfer-tgmm" },
     { name = "gravpop", git = "https://git.ligo.org/asad.hussain/gravpop?rev=simplify-composite" },
     { name = "h5py", specifier = ">=3.10" },
@@ -70,12 +70,12 @@ requires-dist = [
     { name = "numpyro" },
     { name = "pandas", specifier = ">=3.1.1" },
 ]
-provides-extras = ["marimo", "tgmm", "gwmockcat"]
+provides-extras = ["marimo", "tgmm", "gw"]
 
 [[package]]
-name = "astroinfer-gwmockcat"
+name = "astroinfer-gw"
 version = "0.1.0"
-source = { editable = "packages/astroinfer-gwmockcat" }
+source = { editable = "packages/astroinfer-gw" }
 dependencies = [
     { name = "astroinfer" },
     { name = "astropy" },
@@ -125,7 +125,7 @@ source = { virtual = "." }
 [package.dev-dependencies]
 dev = [
     { name = "astroinfer", extra = ["marimo"] },
-    { name = "astroinfer-gwmockcat" },
+    { name = "astroinfer-gw" },
     { name = "astroinfer-tgmm", extra = ["plot"] },
     { name = "marimo" },
     { name = "matplotlib" },
@@ -139,7 +139,7 @@ dev = [
 [package.metadata.requires-dev]
 dev = [
     { name = "astroinfer", extras = ["marimo"], editable = "packages/astroinfer" },
-    { name = "astroinfer-gwmockcat", editable = "packages/astroinfer-gwmockcat" },
+    { name = "astroinfer-gw", editable = "packages/astroinfer-gw" },
     { name = "astroinfer-tgmm", extras = ["plot"], editable = "packages/astroinfer-tgmm" },
     { name = "marimo", specifier = ">=0.25.2" },
     { name = "matplotlib" },

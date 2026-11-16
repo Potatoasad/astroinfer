@@ -99,7 +99,7 @@ class SpinCancels(PopulationLikelihood):
         theta = self.proposal_draws(Lambda)
         d = self.data.reshape_batch((self.E, 1))
         log_p_mass = mass_model.log_prob(theta.to_dict(), Lambda)
-        return (self.log_kernel_at(theta) + log_p_mass
+        return (self.log_likelihood_at(theta) + log_p_mass
                 - self.proposal.log_q_mass(theta, d))
 
 

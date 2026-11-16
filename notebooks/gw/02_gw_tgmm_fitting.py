@@ -48,12 +48,12 @@ def _():
 
     $$p(\theta\mid d_i) \approx \sum_{k=1}^{K} w_k\,\mathcal{N}_{[a,b]}\!\left(T(\theta)\mid\mu_k,\Sigma_k\right),$$
 
-    whose kernels a population analysis can integrate against analytically. In astroinfer a TGMM
-    fit is a **representation** of the catalog, next to the built-in `raw` one: you register a
+    whose Gaussian kernels a population analysis can integrate against analytically. In astroinfer a
+    TGMM fit is a *representation* of the catalog, alongside the built-in `raw` one. You register a
     `TGMMFitter` under a name, `catalog.fit(name)` fits the events that need it, and
     `catalog.dataproduct(representation=name)` stacks the fits for inference.
 
-    This notebook uses the catalog saved by notebook 01.
+    This notebook uses the catalog saved by notebook 1.
     """)
     return
 
@@ -70,21 +70,22 @@ def _():
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## 1. A TGMM config for the masses and redshift
+    ## A TGMM configuration for the masses and redshift
 
-    `TGMMConfig` holds everything that determines a fit, and it is plain JSON, so it is saved with
-    the catalog.
+    `TGMMConfig` holds every setting that determines a fit. It is plain JSON, so it is saved with
+    the catalog. The settings used here are:
 
-    - `columns`: the posterior variables to fit (here $m_1, q, z$).
-    - `K`, `cov`, `block_structure`: $K$ components with full covariances, but $z$ in its own
-      block, so $(m_1, q)$ and $z$ are independent within a component.
-    - `limits`: the truncation box. Using the PE prior's support keeps every component inside it.
-    - `analytic_columns` / `sampled_columns`: what the data product contains. Analytic columns
-      export their kernels $(\mu_k, \sigma_k, \rho_k)$; sampled columns export `N` draws per
+    - `columns`: the posterior variables to fit, here $m_1$, $q$ and $z$.
+    - `K`, `cov` and `block_structure`: $K$ components with full covariance matrices, except that
+      $z$ is in its own block, so $(m_1, q)$ and $z$ are independent within each component.
+    - `limits`: the truncation box. Using the support of the PE prior keeps every component inside
+      it.
+    - `analytic_columns` and `sampled_columns`: what the data product contains. Analytic columns
+      export the kernel parameters $(\mu_k, \sigma_k, \rho_k)$. Sampled columns export `N` draws per
       component, together with the PE prior of the fitted columns.
 
-    The prior of just these three columns comes from the `log_prior[...]` factors PE stored.
-    That is what gets carried through the fit as `prior`.
+    The PE prior of these three columns is computed from the `log_prior[...]` factors that PE
+    stored, and the fit carries it as `prior`.
     """)
     return
 
@@ -105,10 +106,10 @@ def _():
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    `TGMMFitter` wraps the default config. It also holds per-event overrides and the retry
-    policy: a fit with a component (almost) entirely outside the box is refit with the next
-    seed. Registering it on the catalog and calling `catalog.fit` fits every event that has no
-    fit yet, or whose fit is stale.
+    `TGMMFitter` holds the default configuration, the per-event overrides and the retry policy. A
+    fit that puts a component almost entirely outside the box is repeated with the next seed. After
+    the fitter is registered on the catalog, `catalog.fit` fits every event that has no fit yet or
+    whose fit is stale.
     """)
     return
 
@@ -119,8 +120,8 @@ def _(catalog, mass_config):
     _t0 = time.perf_counter()
     masses_fitted = catalog.fit("masses")
     mo.vstack([
-        mo.md(f"Fit **{len(masses_fitted)}** events in {time.perf_counter() - _t0:.1f} s "
-              "(fits already in the saved catalog are reused)."),
+        mo.md(f"Fitted {len(masses_fitted)} events in {time.perf_counter() - _t0:.1f} s. "
+              "Fits already in the saved catalog are reused."),
         catalog,
     ])
     return (masses_fitted,)
@@ -129,10 +130,10 @@ def _(catalog, mass_config):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## 2. Look at one fit
+    ## One fit
 
-    Expand the fit to see its components, truncation box and diagnostics. The corner plot
-    compares the posterior with draws from the TGMM, with the injected truth marked.
+    The expanded fit shows its components, truncation box and diagnostics. The corner plot compares
+    the posterior with draws from the TGMM and marks the injected truth.
     """)
     return
 
@@ -158,12 +159,12 @@ def _(catalog, event, masses_fitted):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## 3. Per-event configs and staleness
+    ## Per-event configurations and stale fits
 
-    Some events need a different config, e.g. more components. Overrides live in the fitter.
-    Changing a setting that affects the fit makes that event's fit **stale**. The next
-    `catalog.fit` refits only that event. Changing a setting that only shapes the data product
-    (`analytic_columns`, `sampled_columns`, `N`) never makes a fit stale.
+    Some events need a different configuration, for example more components. Overrides are stored
+    in the fitter. Changing a setting that affects the fit makes that event's fit *stale*, and the
+    next `catalog.fit` refits only that event. Settings that only shape the data product
+    (`analytic_columns`, `sampled_columns` and `N`) never make a fit stale.
     """)
     return
 
@@ -194,15 +195,15 @@ def _(catalog, masses_fitted):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## 4. The data product
+    ## The data product
 
-    `catalog.dataproduct(representation="masses")` stacks the events' products, event-major.
-    Events can have different $K$. Every event is padded to the largest $K$ with components of
-    weight 0, and the padding copies the event's heaviest component, so nothing is NaN. The
-    first event (K = 8) sets the size here.
+    `catalog.dataproduct(representation="masses")` stacks the events' data products along a leading
+    event axis. Events can have different numbers of components. Every event is padded to the
+    largest $K$ with components of weight 0, which copy the event's heaviest component so that no
+    value is NaN. Here the first event, with $K = 8$, sets the size.
 
-    `N` overrides every event's draws per component. Without it, each event uses its own config's
-    `N`, and the products only stack if those agree.
+    Passing `N` sets the number of draws per component for every event. Without it, each event uses
+    the `N` of its own configuration, and the products can only be stacked if those agree.
     """)
     return
 
@@ -223,11 +224,11 @@ def _(catalog, refit):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## 5. A second representation: the spins
+    ## A second representation for the spins
 
-    A catalog can carry any number of named representations. Here is a 4D fit of the spin
-    magnitudes and tilts: $(\chi_1, \chi_2)$ and $(\cos\theta_1, \cos\theta_2)$ are separate
-    covariance blocks, and all four columns are analytic.
+    A catalog can hold any number of named representations. This one is a four-dimensional fit of
+    the spin magnitudes and tilt cosines, with $(\chi_1, \chi_2)$ and $(\cos\theta_1, \cos\theta_2)$
+    in separate covariance blocks and all four columns analytic.
     """)
     return
 
@@ -247,8 +248,8 @@ def _(catalog):
         _fitted = catalog.fit("spins", errors="warn")
     spin_failures = catalog.missing("spins") + catalog.stale("spins")
     mo.md(f"""
-    Fit **{len(_fitted)}** events. Failed (all retries had a component outside the box):
-    `{spin_failures}`
+    Fitted {len(_fitted)} events. These events failed, because every retry put a component
+    outside the box: `{spin_failures}`
     """)
     return (spin_failures,)
 
@@ -257,9 +258,9 @@ def _(catalog):
 def _():
     mo.md(r"""
     Spin posteriors pile up against the edges of $[0, 1]$, and with $K = 4$ the fitter can put a
-    component almost entirely outside the box. Every retry with a new seed did the same, so
-    `catalog.fit(..., errors="warn")` reported those events and moved on. The fix is a
-    per-event override with fewer components; only those events are refit.
+    component almost entirely outside the box. For the events listed above, every retry with a new
+    seed did the same, so `catalog.fit(..., errors="warn")` reported them and fitted the others.
+    Overriding those events to use fewer components fixes them, and only those events are refit.
     """)
     return
 
@@ -287,13 +288,13 @@ def _(catalog, event, spins_fitted):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## 6. Fitting in transformed coordinates
+    ## Fitting in transformed coordinates
 
-    A `TransformationSpec` changes coordinates before fitting. Its maps are `lambda` strings, so
-    the config can still be saved. Here $m_1$ is fit in $\ln m_1$, and $z$ is quantile-transformed
-    per event: its box comes from the data, so it needs no limits. Limits are given for the
-    *fitted* coordinates (`log_mass_1_source`), and the fit's kernels live in that space too
-    (see the fit's "fitted as" row).
+    A `TransformationSpec` changes coordinates before fitting. Its maps are written as `lambda`
+    strings, so the configuration can still be saved. Here $m_1$ is fitted as $\ln m_1$, and $z$ is
+    quantile-transformed for each event, which takes the box for $z$ from the data, so it needs no
+    limits. Limits are given in the fitted coordinates (`log_mass_1_source`), and the fit's kernels
+    are in those coordinates too, as the "fitted as" row of the fit's display shows.
     """)
     return
 
@@ -334,12 +335,13 @@ def _(catalog, event, log_fitted):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## 7. Save and reload
+    ## Saving and loading
 
-    `catalog.save(root)` is explicit and incremental. Each representation stores its fitter
-    (default config plus per-event overrides) and one folder per fitted event (`gmm.h5` plus the
-    config it was fit with). On reload, every fit comes back with its fit key, so staleness is
-    still known.
+    `catalog.save(root)` writes to disk only when it is called, and only what has changed since the
+    last save. Each representation stores its fitter, with the default configuration and the
+    per-event overrides, and one folder per fitted event, holding `gmm.h5` and the configuration
+    the event was fitted with. Every fit is loaded together with its fit key, so the catalog still
+    knows which fits are stale.
     """)
     return
 

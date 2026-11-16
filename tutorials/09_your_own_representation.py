@@ -46,20 +46,19 @@ with app.setup:
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    # 9 · Your own representation 🧩
+    # 9. Your own representation
 
-    In notebook 8 the catalog handed posteriors to the population analysis as **raw draws**. That is
-    one *representation* of a posterior. There are others, often better:
+    In notebook 8 the catalog passed posteriors to the population analysis as raw draws. Raw draws
+    are one *representation* of a posterior, and there are others that are often better. A
+    Gaussian, or a mixture of Gaussians, is compact and smooth and can be integrated analytically.
+    A truncated Gaussian mixture, provided by the `astroinfer_tgmm` extension, fits posteriors that
+    pile up against hard edges. KDEs, normalising flows and histograms are further options.
 
-    * a **Gaussian** (or a mixture of them) is compact, smooth, and can be integrated analytically;
-    * a **truncated Gaussian mixture** (the `astroinfer_tgmm` extension) fits posteriors that pile
-      up against hard edges;
-    * a KDE, a normalising flow, a histogram...
-
-    A catalog can carry any number of named representations next to the built-in `raw` one. It
-    fits them, notices when a fit is out of date, stacks them into data products, and saves and
-    loads them, **without knowing anything about what they are**. All it needs is that your classes
-    follow a small protocol. In this notebook you will write one: a moment-matched Gaussian.
+    Besides the built-in `raw` representation, a catalog can carry any number of named
+    representations. It fits them, notices when a fit is out of date, stacks the fits into data
+    products, and saves and loads them, all without knowing what kind of representation it is
+    handling. Your classes only have to follow a small protocol. In this notebook we write a
+    moment-matched Gaussian representation.
     """)
     return
 
@@ -67,31 +66,31 @@ def _():
 @app.cell(hide_code=True)
 def _():
     mo.callout(mo.md(r"""
-    **🧩 What you implement: a `Fitter` and a `Fit`**
+    **What you implement: a `Fitter` and a `Fit`**
 
-    The **Fitter** holds the settings and makes one Fit per event. Subclass `BaseFitter`.
+    The fitter holds the settings and makes one fit per event. Subclass `BaseFitter`.
 
-    | member | what it is |
+    | member | description |
     |---|---|
     | `kind` (class attribute) | a unique name for the representation type, e.g. `"gaussian"` |
     | `fit_type` (class attribute) | your Fit class |
     | `fit(posterior, *, eventname, source_key)` | fit one event's `PosteriorData`, return a Fit |
-    | `fit_key(eventname, source_key)` | a hash of *everything that determines the fit*; `config_hash` helps |
+    | `fit_key(eventname, source_key)` | a hash of everything that determines the fit (`config_hash` computes one) |
     | `dataproduct_options(eventname)` | settings that only shape the data product (e.g. `N`) |
     | `to_dict()` / `from_dict(d)` | the settings as JSON, so the fitter is saved with the catalog |
 
-    The **Fit** is one event's fitted object. Subclass `BaseFit`.
+    The fit is the fitted object for one event. Subclass `BaseFit`.
 
-    | member | what it is |
+    | member | description |
     |---|---|
     | `fit_key` | the key it was made with |
     | `dataproduct(*, N, seed, **options)` | this event's arrays, e.g. `{"mean": (D,), "cov": (D, D)}` |
     | `save(directory)` / `load(directory, ctx)` | write / rebuild yourself in a folder you own |
     | `stack(products)` (optional) | combine events into `(E, ...)` arrays; the default stacks equal shapes |
 
-    **Staleness, the one rule:** a fit is stale when `fit.fit_key != fitter.fit_key(event, source_key)`.
-    `source_key` is the posterior's content hash (notebook 8), so changing a fit setting *or*
-    replacing the posterior makes a fit stale; changing a data-product option does not.
+    A fit is *stale* when `fit.fit_key != fitter.fit_key(event, source_key)`. Since `source_key` is
+    the hash of the posterior (notebook 8), a fit becomes stale when you change one of its settings
+    or replace the posterior. Changing a data-product option does not make it stale.
     """), kind="info")
     return
 
@@ -101,8 +100,9 @@ def _():
     mo.md(r"""
     ## The survey and its catalog
 
-    Same classes as notebooks 6 and 8. We load the catalog notebook 8 saved (with `types=`, since
-    the classes live in this notebook). If it is not there yet, a small one is built in memory.
+    The classes are the same as in notebooks 6 and 8. We load the catalog that notebook 8 saved,
+    passing `types=` because the classes are defined in this notebook. If that catalog does not
+    exist yet, a smaller one is built in memory.
     """)
     return
 
@@ -208,12 +208,12 @@ def _(Lambda_true, pe_priors, pop_model, telescope, trigger):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## Step 1 · The Fit: one event's Gaussian
+    ## The fit
 
     A `GaussianFit` stores the columns, a mean vector $\mu$ and a covariance $\Sigma$. Its data
-    product is $\mu$, $\Sigma$, and `N` draws from the Gaussian (handy for plots). It saves itself as
-    one small JSON file. Give it a `_display_body` and it shows up nicely everywhere, including
-    inside the catalog.
+    product is $\mu$, $\Sigma$ and `N` draws from the Gaussian, which are useful for plotting. It
+    saves itself as one small JSON file. Because it has a `_display_body`, it gets a rich display,
+    including inside the catalog's display.
     """)
     return
 
@@ -265,17 +265,19 @@ class GaussianFit(BaseFit):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## Step 2 · The Fitter: settings, per-event overrides, and the key
+    ## The fitter
 
     The fitter has three settings:
 
-    * `columns`: which posterior variables to fit (**affects the fit**),
-    * `inflate`: multiply $\Sigma$ by this factor, a crude way to be conservative (**affects the fit**),
-    * `N`: draws per event in the data product (**data product only**).
+    * `columns`, the posterior variables to fit (affects the fit);
+    * `inflate`, a factor that multiplies $\Sigma$, as a crude way to be conservative (affects the
+      fit);
+    * `N`, the number of draws per event in the data product (affects only the data product).
 
-    Any event can override the fit settings: `fitter.overrides["star_03"] = {"inflate": 2.0}`.
-    `fit_key` hashes exactly the settings that affect *this event's* fit, plus the posterior's
-    `source_key`. That one line is what makes staleness work.
+    Each event can override the fit settings, for example
+    `fitter.overrides["star_03"] = {"inflate": 2.0}`. `fit_key` hashes the settings that affect
+    this event's fit, together with the posterior's `source_key`. This is how the catalog decides
+    whether a fit is stale.
 
     `@ai.register` adds the `"gaussian"` kind to astroinfer's registry, so `Catalog.load` knows which
     class rebuilds a saved `"gaussian"` representation.
@@ -335,11 +337,12 @@ class GaussianFitter(BaseFitter):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## Step 3 · Register it on the catalog and fit
+    ## Fitting the catalog
 
-    `register_representation(name, fitter)` attaches the fitter under a name of your choosing (you
-    could have two Gaussian representations of different columns). `catalog.fit(name)` fits every
-    event that is **missing** a fit or whose fit is **stale**, and returns the events it fit.
+    `register_representation(name, fitter)` attaches the fitter to the catalog under a name of your
+    choice, so you could have two Gaussian representations of different columns.
+    `catalog.fit(name)` fits every event whose fit is missing or stale, and returns the names of the
+    events it fitted:
     """)
     return
 
@@ -349,8 +352,8 @@ def _(catalog):
     catalog.register_representation("gauss", GaussianFitter(["log_L", "distance"]), overwrite=True)
     first_fit = catalog.fit("gauss")
     mo.vstack([
-        mo.md(f"Fit **{len(first_fit)}** events. Calling `catalog.fit('gauss')` again fits "
-              f"**{len(catalog.fit('gauss'))}**: nothing is missing or stale."),
+        mo.md(f"The first call fitted {len(first_fit)} events. Calling `catalog.fit('gauss')` "
+              f"again fits {len(catalog.fit('gauss'))}, because no fit is missing or stale."),
         catalog,
     ])
     return (first_fit,)
@@ -380,15 +383,16 @@ def _(catalog, event, first_fit):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    The Gaussian matches the bulk of most posteriors, but notice the hard edge at
-    $r = 2\,\mathrm{kpc}$ (the PE prior's boundary): the Gaussian spills over it. Keep that in mind;
-    we will see what it costs at the end.
+    The Gaussian matches the bulk of most posteriors. Near the hard edge at $r = 2\,\mathrm{kpc}$,
+    which is the boundary of the PE prior, it spills over into a region the posterior does not
+    reach. The last section of this notebook shows what this costs.
 
-    ## Step 4 · The data product
+    ## The data product
 
-    `catalog.dataproduct(representation="gauss")` calls every fit's `dataproduct` and stacks them
-    event-major. Our fits return equal shapes, so the default `stack` just adds a leading `E` axis.
-    (`astroinfer_tgmm` overrides `stack` to pad events that have different numbers of components.)
+    `catalog.dataproduct(representation="gauss")` calls the `dataproduct` method of every fit and
+    stacks the results along a leading event axis `E`. Our fits all return arrays of the same shape,
+    so the default `stack` is enough. (`astroinfer_tgmm` overrides `stack` to pad events that have
+    different numbers of components.)
     """)
     return
 
@@ -404,10 +408,10 @@ def _(catalog, first_fit):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## Step 5 · Staleness in action
+    ## Stale fits
 
-    Four changes, one after another. After each we ask `catalog.stale("gauss")` which fits are out of
-    date. Watch which changes count.
+    The cell below makes four changes in a row and calls `catalog.stale("gauss")` after each one to
+    list the fits that are out of date:
     """)
     return
 
@@ -439,7 +443,7 @@ def _(catalog, first_fit, pe_priors, telescope):
     mo.vstack([
         mo.md("| change | `catalog.stale('gauss')` |\n|---|---|\n"
               + "\n".join(f"| {c} | `{s}` |" for c, s in _rows)),
-        mo.md(f"The refit touched only **{_refit}**. Here is the catalog just *before* that refit "
+        mo.md(f"The refit only touched {_refit}. Here is the catalog just before that refit "
               "(expand *Events*):"),
         _snapshot,
     ])
@@ -449,15 +453,15 @@ def _(catalog, first_fit, pe_priors, telescope):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    `star_05`'s replacement posterior came from `catalog[name].observed_data`: every posterior
-    remembers the observation it was computed from, so you can always redo PE.
+    The replacement posterior for `star_05` was computed from `catalog[name].observed_data`. Every
+    posterior keeps the observation it was computed from, so PE can always be rerun.
 
-    ## Step 6 · Save and load
+    ## Saving and loading
 
-    `catalog.save(root)` asks each fit to `save` itself into its own folder and writes the fitter's
+    `catalog.save(root)` asks each fit to save itself into its own folder and writes the fitter's
     `to_dict()` as JSON. `Catalog.load` reads the kind (`"gaussian"`), looks it up in the registry,
-    and calls `GaussianFitter.from_dict` and `GaussianFit.load`. Per-event overrides come back too,
-    and since every fit is stored with its key, nothing is stale after loading.
+    and calls `GaussianFitter.from_dict` and `GaussianFit.load`. Per-event overrides are restored
+    as well, and since every fit is stored with its key, no fit is stale after loading.
     """)
     return
 
@@ -473,7 +477,7 @@ def _(catalog, staleness_done):
     * representations after loading: `{reloaded.representations}`
     * `{_e}`'s override survived: `{reloaded.fitter("gauss").overrides}`
     * stale after loading: `{reloaded.stale("gauss")}`
-    * same fit as before saving: **{bool(np.allclose(reloaded.get_fit(_e, "gauss").cov, catalog.get_fit(_e, "gauss").cov))}**
+    * same fit as before saving: `{bool(np.allclose(reloaded.get_fit(_e, "gauss").cov, catalog.get_fit(_e, "gauss").cov))}`
     """),
         reloaded.get_fit(_e, "gauss"),
     ])
@@ -482,10 +486,10 @@ def _(catalog, staleness_done):
 
 @app.cell(hide_code=True)
 def _():
-    mo.callout(mo.md(r"""
-    **📦 Shipping a representation in a package.** `@ai.register` works for classes defined in a
-    notebook or script. In a package, advertise the kind through an entry point instead, so
-    `Catalog.load` finds it without anyone importing your package first:
+    mo.md(r"""
+    `@ai.register` works for classes defined in a notebook or a script. If your representation lives
+    in a package, declare the kind through an entry point instead, so that `Catalog.load` can find
+    it without your package being imported first:
 
     ```toml
     # pyproject.toml
@@ -493,34 +497,34 @@ def _():
     gaussian = "my_package:GaussianFitter"
     ```
 
-    This is exactly how `astroinfer_tgmm` registers its `"tgmm"` kind.
-    """), kind="neutral")
+    `astroinfer_tgmm` registers its `"tgmm"` kind this way.
+    """)
     return
 
 
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## Step 7 · Did compression cost us anything?
+    ## The cost of compression
 
-    With a Gaussian per event, the per-event evidence becomes an average of the Gaussian over draws
-    from the **population**, $\theta_k\sim p(\theta\mid\Lambda)$:
+    With a Gaussian for each event, the evidence of an event becomes an average of its Gaussian
+    over draws from the population, $\theta_k\sim p(\theta\mid\Lambda)$:
 
     $$
     Z_i(\Lambda)\;\propto\;\int \frac{\mathcal N(\theta;\mu_i,\Sigma_i)}{\pi(\theta)}\,p(\theta\mid\Lambda)\,d\theta
     \;\approx\;\frac{1}{M}\sum_{k=1}^{M}\frac{\mathcal N(\theta_k;\mu_i,\Sigma_i)}{\pi(\theta_k)}.
     $$
 
-    The PE prior $\pi$ is flat here, so it only adds a constant. We compare the hyperparameter
-    likelihood on a grid against the raw-draws estimator from notebook 8, both with the selection
-    term (same injections as notebook 6).
+    The PE prior $\pi$ is flat here, so it only contributes a constant. Below we evaluate the
+    hyperparameter likelihood on a grid and compare it with the raw-draws estimator from
+    notebook 8. Both include the selection term, with the same injections as notebook 6.
     """)
     return
 
 
 @app.cell
 def _(pop_model, telescope, trigger):
-    # Injections for the selection term, exactly as in notebook 6.
+    # Injections for the selection term, as in notebook 6.
     Lg = dict(mu_L=0.5, sigma_L=1.5)
     inj = pop_model.sample(Lg, key=jax.random.key(5), shape=(50000,))
     found = trigger.detect(telescope.sample(Star.from_dict(inj), key=6), np.random.default_rng(7))
@@ -595,33 +599,33 @@ def _(Lambda_true, mu_grid, sigma_grid, surfaces):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    The two agree on the big picture: the same ridge, and the truth inside both. But the Gaussian
-    version is looser, stretching much further along the ridge towards low $\mu_L$. That is the
-    price of the approximation. The Gaussians put probability beyond $r = 2\,\mathrm{kpc}$, where
-    the population has none, and they smear out each posterior's shape near that edge, so part of
-    the information about luminosity is lost. That is why serious representations take
-    **truncation** seriously.
+    Both likelihoods have the same ridge, and both contain the truth. The Gaussian version is
+    looser, though, and extends much further along the ridge towards low $\mu_L$. The Gaussians put
+    probability beyond $r = 2\,\mathrm{kpc}$, where the population has none, and they blur the shape
+    of each posterior near that edge, so some of the information about luminosity is lost. This is
+    why the truncated Gaussian mixtures in `astroinfer_tgmm` model the truncation explicitly.
 
-    ## Where next
+    ## Where to go next
 
-    * **`astroinfer_tgmm`** is the real-world version of this notebook: `TGMMFitter(TGMMConfig(...))`
-      fits truncated Gaussian mixtures (with per-event configs, retries, transformed coordinates, and
-      padded data products), registered under the kind `"tgmm"`.
-    * **`astroinfer_dev/notebooks/01–03`** are the graduate track: a mock gravitational-wave catalog
-      end to end, TGMM fits of its posteriors, and population inference with an event-informed
-      proposal and selection effects. Everything in them is something you have now built yourself.
+    The `astroinfer_tgmm` package is a full version of what this notebook builds.
+    `TGMMFitter(TGMMConfig(...))` fits truncated Gaussian mixtures, with per-event configurations,
+    retries, transformed coordinates and padded data products, and registers them under the kind
+    `"tgmm"`.
 
-    ## Recap
+    The notebooks in `notebooks/gw/01–03` apply the same pieces to gravitational waves. They build a
+    mock gravitational-wave catalog, fit its posteriors with TGMMs, and run population inference
+    with an event-informed proposal and selection effects.
 
-    * A representation is a **Fitter** (settings, `fit`, `fit_key`, `dataproduct_options`,
-      `to_dict` / `from_dict`) and a **Fit** (`fit_key`, `dataproduct`, `save` / `load`, optional
-      `stack`). Subclass `BaseFitter` / `BaseFit`.
-    * `fit_key = config_hash(settings that affect this event's fit + source_key)`: that makes fits go
-      stale exactly when they should, and never otherwise.
-    * `@ai.register` (or an entry point in a package) lets `Catalog.load` rebuild your kind.
-    * `catalog.register_representation`, `catalog.fit`, `catalog.stale`,
-      `catalog.dataproduct(representation=...)`, `catalog.save` / `ai.Catalog.load` all work the same
-      for every kind.
+    ## Summary
+
+    * A representation consists of a fitter (settings, `fit`, `fit_key`, `dataproduct_options`,
+      `to_dict` / `from_dict`) and a fit (`fit_key`, `dataproduct`, `save` / `load`, and optionally
+      `stack`), subclassed from `BaseFitter` and `BaseFit`.
+    * `fit_key` hashes the settings that affect an event's fit together with its `source_key`, so a
+      fit goes stale when either of them changes and at no other time.
+    * `@ai.register`, or an entry point in a package, lets `Catalog.load` rebuild your kind.
+    * `register_representation`, `fit`, `stale`, `dataproduct(representation=...)`, `save` and
+      `ai.Catalog.load` work the same way for every kind.
     """)
     return
 
@@ -629,16 +633,17 @@ def _():
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## ✏️ Your turn: fitting a subsample
+    ## Exercise: fitting a subsample
 
-    Big posteriors are slow to fit, so add a `max_draws` setting: the fit uses a reproducible random
-    subset of at most `max_draws` posterior draws (say `np.random.default_rng(0)`).
+    Large posteriors are slow to fit. Add a `max_draws` setting, so that the fit uses a reproducible
+    random subset of at most `max_draws` posterior draws (drawn with `np.random.default_rng(0)`,
+    for example).
 
     1. Write `SubsampledGaussianFitter(GaussianFitter)` with a new `kind` and a `max_draws` setting.
        Does `max_draws` belong in `fit_key`? Should it be overridable per event?
     2. Register it as `"gauss_sub"` on the catalog with `max_draws=200` and fit.
-    3. Change `max_draws` and check `catalog.stale("gauss_sub")`. Then change `N`. Did each do what
-       you expected?
+    3. Change `max_draws` and check `catalog.stale("gauss_sub")`. Then change `N`. Did each change
+       have the effect you expected?
     """)
     return
 
@@ -651,7 +656,7 @@ def _():
 
 @app.cell(hide_code=True)
 def _():
-    mo.accordion({"💡 Show a solution": mo.md(r"""
+    mo.accordion({"Show a solution": mo.md(r"""
     ```python
     @ai.register
     class SubsampledGaussianFitter(GaussianFitter):
@@ -662,8 +667,8 @@ def _():
             self.max_draws = int(max_draws)
 
         def settings_for(self, eventname):
-            # max_draws changes the fit, so it goes into the settings -> into fit_key,
-            # and per-event overrides of it work for free.
+            # max_draws changes the fit, so it goes into the settings and therefore into
+            # fit_key. Per-event overrides of it then work without extra code.
             return {"max_draws": self.max_draws, **super().settings_for(eventname)}
 
         def fit(self, posterior, *, eventname, source_key):

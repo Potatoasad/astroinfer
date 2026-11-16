@@ -4,13 +4,8 @@ import pandas as pd
 import pytest
 from astroinfer.detection import ThresholdTrigger
 
-from astroinfer_gwmockcat import (
-    GWMockCatData,
-    GWMockCatMeasurement,
-    GWParams,
-    effective_spins,
-    projection_factor_model,
-)
+from astroinfer_gw.gwmockcat import GWMockCatData, GWMockCatMeasurement, GWParams
+from astroinfer_gw.physics import effective_spins, projection_factor_model
 
 jax.config.update("jax_enable_x64", True)
 

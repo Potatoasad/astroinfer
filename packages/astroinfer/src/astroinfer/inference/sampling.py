@@ -17,6 +17,16 @@ def _resolve_seed(seed) -> int:
     return int(np.random.default_rng(seed).integers(2**30))
 
 
+def _prior_variables(key, prior) -> tuple[str, ...]:
+    """The fields a PE prior entry has a density for."""
+    names = getattr(prior, "var_names", None)
+    return (key,) if names is None else tuple(names)
+
+
+def _factor_name(names) -> str:
+    return f"log_prior[{', '.join(names)}]"
+
+
 def run_sampler(likelihood, priors, *, seed=None, **sampler_kwargs):
     """Build and run a ``gravpop.Sampler``; return it after sampling."""
     import gravpop as gp
@@ -43,22 +53,34 @@ def parameter_estimation(
     """
     Posterior samples of theta given one observation d.
 
-    Uses K(d | theta) as the likelihood.
+    Uses L(d | theta) as the likelihood.
     Detection selection is handled separately.
 
+    ``pe_priors`` maps names to numpyro distributions or gravpop
+    prior blocks. A prior block with ``var_names`` and
+    ``log_prob(theta)`` gives the joint density of those fields;
+    blocks without ``log_prob`` (e.g. ``gravpop.Deterministic``)
+    only set variables. Every field needs a density.
+
     Returns a pandas DataFrame with parameter samples,
-    PE prior density, and per-parameter log prior densities,
+    PE prior density, and log prior densities per distribution
+    (``log_prior[x]``) or block (``log_prior[x, y]``),
     or a PosteriorData when ``as_posterior=True``.
     The fitted sampler is stored on ``measurement.sampler``.
     """
+    pe_priors = dict(pe_priors)
+    factors = {
+        _prior_variables(k, prior): prior
+        for k, prior in pe_priors.items()
+        if hasattr(prior, "log_prob")
+    }
+    covered = {v for names in factors for v in names}
     missing = [
         k for k in measurement.parameter_names
-        if k not in pe_priors
+        if k not in covered
     ]
     if missing:
-        raise KeyError(f"pe_priors has no {missing}")
-
-    pe_priors = dict(pe_priors)
+        raise KeyError(f"pe_priors has no density for {missing}")
 
     if measurement.data_type is not None:
         d = coerce(d, measurement.data_type)
@@ -76,18 +98,17 @@ def parameter_estimation(
     measurement.sampler = sampler
     samples = sampler.samples
 
-    for k, prior in pe_priors.items():
-        samples[f"log_prior[{k}]"] = np.asarray(
-            prior.log_prob(
-                jnp.asarray(samples[k].to_numpy())
-            ),
-            dtype=np.float64,
-        )
+    for names, prior in factors.items():
+        if hasattr(prior, "var_names"):
+            log_prob = prior.log_prob({v: jnp.asarray(samples[v].to_numpy()) for v in names})
+        else:
+            log_prob = prior.log_prob(jnp.asarray(samples[names[0]].to_numpy()))
+        samples[_factor_name(names)] = np.asarray(log_prob, dtype=np.float64)
 
     samples["prior"] = np.exp(
         sum(
-            samples[f"log_prior[{k}]"]
-            for k in pe_priors
+            samples[_factor_name(names)]
+            for names in factors
         )
     )
 

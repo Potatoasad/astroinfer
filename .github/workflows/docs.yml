@@ -1,0 +1,60 @@
+name: Docs
+
+# Builds docs/ with Jupyter Book and publishes it to GitHub Pages. The code cells on each page
+# are executed during the build, in the project environment, so outputs match the library.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "packages/**"
+      - "tutorials/**"
+      - "scripts/**"
+      - "uv.lock"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      # The site is served from https://<owner>.github.io/<repository>/
+      BASE_URL: /${{ github.event.repository.name }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --locked
+      - uses: actions/configure-pages@v5
+      - name: Convert the marimo tutorials into notebooks for the examples section
+        run: uv run --with nbformat python scripts/export_tutorials.py
+      - name: Build the site, executing every page
+        working-directory: docs
+        run: >
+          uv run --with jupyter-book==2.1.7 --with ipykernel --with jupyter-server
+          jupyter-book build --html --execute
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/_build/html
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

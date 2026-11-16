@@ -37,14 +37,14 @@ with app.setup:
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    # 7 · Sharper telescopes 🔬
+    # 7. Sharper telescopes
 
-    Good news: the observatory has upgraded. The new telescope measures fluxes and parallaxes
-    **ten times** more precisely than the one in notebook 6. Better data can only help... right?
-
-    Not if we keep computing the per-star integrals the way we have so far. In this notebook the
-    analysis of notebook 6 breaks on the sharper data, we find out why, and we fix it with a
-    **`Proposal`**: an importance-sampling distribution that knows where each star's data point.
+    The observatory has a new telescope that measures fluxes and parallaxes ten times more
+    precisely than the one in notebook 6. You would expect better data to give a better answer,
+    but with the per-star integrals computed the way we have done so far, the analysis of notebook
+    6 fails on the sharper data. This notebook shows why, and fixes it with a `Proposal`, an
+    importance-sampling distribution that draws each star's parameters close to where its data put
+    them.
     """)
     return
 
@@ -52,9 +52,9 @@ def _():
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## The survey, unchanged
+    ## The survey
 
-    Same stars, same population, same flux limit, same selection term as notebook 6. Only the
+    The stars, population, flux limit and selection term are the same as in notebook 6. Only the
     telescope's noise levels change.
     """)
     return
@@ -187,19 +187,20 @@ def _(Lambda_true, blurry, pop_model, sharp, trigger):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## The per-star integrals collapse
+    ## Per-star integrals with sharp data
 
-    Recall what `PopulationLikelihood` computes for star $i$:
+    For star $i$, `PopulationLikelihood` computes
 
     $$
-    Z_i(\Lambda)=\int K(d_i\mid\theta)\,p(\theta\mid\Lambda)\,\mathrm d\theta
-    \;\approx\;\frac1N\sum_{j=1}^{N}K(d_i\mid\theta_{j}),\qquad \theta_j\sim p(\theta\mid\Lambda).
+    Z_i(\Lambda)=\int \mathcal{L}(d_i\mid\theta)\,p(\theta\mid\Lambda)\,\mathrm d\theta
+    \;\approx\;\frac1N\sum_{j=1}^{N}\mathcal{L}(d_i\mid\theta_{j}),\qquad \theta_j\sim p(\theta\mid\Lambda).
     $$
 
-    It throws darts from the **whole population** and counts how many land where the likelihood
-    is large. With a blurry telescope that region is big and plenty of darts land in it. With the
-    sharp telescope it is a tiny box, and almost every dart misses. The effective sample size
-    $N_\mathrm{eff}=(\sum_j w_j)^2/\sum_j w_j^2$ tells us how many darts actually count:
+    In other words, it throws darts drawn from the whole population and counts how many land
+    where the likelihood is large. With a blurry telescope that region is big, and plenty of darts
+    land in it. With the sharp telescope it is a small box that almost every dart misses. The
+    effective sample size $N_\mathrm{eff}=(\sum_j w_j)^2/\sum_j w_j^2$ counts how many darts
+    contribute:
     """)
     return
 
@@ -220,12 +221,13 @@ def _(Lambda_true, data, data_blurry, blurry, pop_model, sharp):
     _ax.hist(neff_blurry, bins=_bins, color=style.INK_2, alpha=0.6, label="blurry telescope")
     _ax.hist(neff_sharp, bins=_bins, color=style.PRIOR, alpha=0.75, label="sharp telescope")
     _ax.set(xscale="log", xlabel=f"$N_\\mathrm{{eff}}$ per star (out of {N_POP:,} population draws)",
-            ylabel="stars", title="Sharper data, starved integrals")
+            ylabel="stars", title="Effective draws per star for the two telescopes")
     _ax.legend(loc="upper center")
     mo.vstack([
         _fig,
-        mo.md(f"Median $N_\\mathrm{{eff}}$: **{np.median(neff_blurry):.0f}** with the blurry telescope, "
-              f"**{np.median(neff_sharp):.1f}** with the sharp one. Many stars rest on a single draw."),
+        mo.md(f"The median $N_\\mathrm{{eff}}$ is {np.median(neff_blurry):.0f} with the blurry telescope "
+              f"and {np.median(neff_sharp):.1f} with the sharp one. For many stars the estimate "
+              "rests on a single draw."),
     ])
     return N_POP, neff_sharp, neff_per_star
 
@@ -233,10 +235,11 @@ def _(Lambda_true, data, data_blurry, blurry, pop_model, sharp):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    A handful of effective draws per star means $\log\hat Z_i(\Lambda)$ is dominated by noise.
-    Worse, the noise is not innocent: populations that happen to put their darts near the data
-    look *better* than they are. Let's run the notebook 6 analysis anyway and see. First, the
-    injections for the selection term, scattered through the sharp telescope:
+    With only a handful of effective draws per star, $\log\hat Z_i(\Lambda)$ is dominated by
+    noise. The noise also biases the result, because populations that happen to put their darts
+    near the data look better than they are. To see the effect, we run the notebook 6 analysis
+    anyway, starting with the injections for the selection term, simulated through the sharp
+    telescope:
     """)
     return
 
@@ -256,7 +259,7 @@ def _(pop_model, sharp, trigger):
         n_injections=N_INJ,
     )
     hyper_priors = dict(mu_L=dist.Uniform(-2.0, 2.0), sigma_L=dist.Uniform(0.1, 2.0))
-    mo.md(f"**{len(_found):,}** of {N_INJ:,} injections found.")
+    mo.md(f"{len(_found):,} of {N_INJ:,} injections are found.")
     return hyper_priors, selection
 
 
@@ -273,13 +276,14 @@ def _(N_POP, data, hyper_priors, pop_model, selection, sharp):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    The truth is $(\mu_L,\sigma_L)=(0,\,0.7)$. That is not a little off: the posterior is narrow,
-    confident, and nowhere near it. **Always check $N_\mathrm{eff}$ before trusting a population run.**
+    The truth is $(\mu_L,\sigma_L)=(0,\,0.7)$, and the posterior is narrow and far from it. A
+    population run with a low $N_\mathrm{eff}$ can look confident and still be wrong, so check
+    $N_\mathrm{eff}$ before trusting the result.
 
     ## Importance sampling with a proposal
 
-    The fix is to throw the darts where the data say the star is. Draw $\theta$ from a proposal
-    $q(\theta\mid d_i)$ that hugs each star's likelihood, and reweight:
+    The way out is to throw the darts where the data say the star is. We draw $\theta$ from a
+    proposal $q(\theta\mid d_i)$ that closely follows each star's likelihood, and reweight:
 
     $$
     \hat Z_i(\Lambda)=\frac1N\sum_{j=1}^{N}
@@ -287,11 +291,11 @@ def _():
     \qquad \theta_{ij}\sim q(\cdot\mid d_i).
     $$
 
-    Any $q$ gives an unbiased estimate as long as it covers the region where $K\cdot p$ is large;
-    a $q$ close to $K\cdot p$ gives nearly equal weights and $N_\mathrm{eff}\approx N$.
+    Any $q$ gives an unbiased estimate as long as it covers the region where $\mathcal{L}\cdot p$ is large;
+    a $q$ close to $\mathcal{L}\cdot p$ gives nearly equal weights and $N_\mathrm{eff}\approx N$.
 
-    A proposal reads data and draws parameters: it is a **measurement process run backwards**,
-    and astroinfer treats it exactly like one.
+    A proposal reads data and draws parameters, so it is a measurement process run backwards, and
+    astroinfer treats it as one.
     """)
     return
 
@@ -299,22 +303,23 @@ def _():
 @app.cell(hide_code=True)
 def _():
     mo.callout(mo.md(r"""
-    **🧩 What you implement in a `Proposal`** (subclass `ai.Proposal`)
+    **What you implement in a `Proposal`** (subclass `ai.Proposal`)
 
-    | attribute / method | what it is |
+    | attribute / method | description |
     |---|---|
-    | `parameter_type` | the measurement's **data** class: what $q$ *reads* (here `StarObservation`) |
-    | `data_type` | the measurement's **parameter** class: what $q$ *draws* (here `Star`) |
-    | `sample_single(self, d, key, Lambda)` | draw **one** $\theta\sim q_\Lambda(\cdot\mid d)$ for **one** star |
+    | `parameter_type` | the measurement's data class, which $q$ reads (here `StarObservation`) |
+    | `data_type` | the measurement's parameter class, which $q$ draws (here `Star`) |
+    | `sample_single(self, d, key, Lambda)` | draw one $\theta\sim q_\Lambda(\cdot\mid d)$ for a single star |
     | `logpdf_single(self, theta, d, Lambda)` | the scalar $\log q_\Lambda(\theta\mid d)$ |
 
-    The types are **swapped** relative to the measurement process; astroinfer checks they mirror it.
-    `Lambda` is the hyperparameter dict; a proposal that does not depend on it just ignores it.
+    The types are swapped relative to the measurement process, and astroinfer checks that they
+    mirror it. `Lambda` is the hyperparameter dict; a proposal that does not depend on it can
+    ignore it.
 
-    One rule: draws must be a **smooth function of `(key, Lambda)`**. The likelihood re-draws with
-    the *same* key at every $\Lambda$ (common random numbers), so $\hat Z_i(\Lambda)$ is smooth and
-    NUTS can use its gradient. Location-scale transforms and inverse CDFs are fine;
-    rejection sampling is not.
+    Draws must be a smooth function of `(key, Lambda)`. The likelihood re-draws with the same key
+    at every $\Lambda$ (common random numbers), so that $\hat Z_i(\Lambda)$ is smooth and NUTS can
+    use its gradient. Location-scale transforms and inverse CDFs are fine; rejection sampling is
+    not.
     """), kind="info")
     return
 
@@ -322,15 +327,13 @@ def _():
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    Our proposal follows the measurement backwards:
+    Our proposal runs the measurement backwards in two steps. The true parallax is drawn near the
+    measured one, $\varpi\sim\mathcal{TN}(\hat\varpi,\ k\sigma_\varpi)$, truncated to the survey
+    volume, and $r=1/\varpi$. Given $r$, the luminosity follows from the measured flux,
+    $\log_{10}L\sim\mathcal N(\log_{10}\hat F+2\log_{10}r,\ k\sigma_F)$.
 
-    1. the **true parallax** is near the measured one: $\varpi\sim\mathcal{TN}(\hat\varpi,\ k\sigma_\varpi)$,
-       truncated to the survey volume, and $r=1/\varpi$;
-    2. given $r$, the **luminosity** follows from the measured flux:
-       $\log_{10}L\sim\mathcal N(\log_{10}\hat F+2\log_{10}r,\ k\sigma_F)$.
-
-    $k=1.5$ widens both a little, so $q$ comfortably covers the likelihood. Since we draw $\varpi$
-    but score $r$, $\log q$ picks up the Jacobian $|\mathrm d\varpi/\mathrm dr| = 1/r^2$.
+    The factor $k=1.5$ widens both a little, so that $q$ covers the likelihood comfortably. Since we
+    draw $\varpi$ but score $r$, $\log q$ includes the Jacobian $|\mathrm d\varpi/\mathrm dr| = 1/r^2$:
     """)
     return
 
@@ -396,9 +399,9 @@ def _(sharp):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    `proposal.sample(d, N=, key=, Lambda=)` and `proposal.logpdf(theta, d, Lambda=)` work just like
-    a measurement process's. Here are a thousand darts for one star, from the population and from
-    the proposal:
+    `proposal.sample(d, N=, key=, Lambda=)` and `proposal.logpdf(theta, d, Lambda=)` work like the
+    methods of a measurement process. Here are a thousand draws for one star, from the population
+    and from the proposal:
     """)
     return
 
@@ -426,7 +429,7 @@ def _(Lambda_true, data, detected_truths, pop_model, proposal):
             _ax.set(xlim=(_cx - 0.12, _cx + 0.12), ylim=(_cy - 0.25, _cy + 0.25),
                     title=f"Zoomed in: {_hits} of 1,000 population draws land here")
         else:
-            _ax.set(title=f"Star {star}: where the darts land")
+            _ax.set(title=f"Population and proposal draws for star {star}")
             _ax.legend(loc="lower right", markerscale=2)
     _fig
     return
@@ -435,8 +438,8 @@ def _(Lambda_true, data, detected_truths, pop_model, proposal):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    Pass the proposal to the likelihood with `proposal=`. The draws now come from $q$, so far
-    fewer are needed: we use $N=500$ instead of 2,000.
+    The proposal is passed to the likelihood with `proposal=`. Since the draws now come from $q$,
+    far fewer are needed, and we use $N=500$ instead of 2,000:
     """)
     return
 
@@ -454,13 +457,13 @@ def _(N_POP, Lambda_true, data, neff_per_star, neff_sharp, pop_model, proposal, 
     _ax.hist(neff_proposal / N_Q, bins=_bins, color=style.POSTERIOR, alpha=0.75,
              label=f"proposal draws (N = {N_Q})")
     _ax.set(xscale="log", xlabel=r"$N_\mathrm{eff}/N$ per star", ylabel="stars",
-            title="Same data, two ways to throw darts")
+            title="Effective draws per star, with and without the proposal")
     _ax.legend(loc="upper left")
     mo.vstack([
         _fig,
-        mo.md(f"With the proposal, median $N_\\mathrm{{eff}}$ = **{np.median(neff_proposal):.0f}** of "
-              f"{N_Q} draws (minimum {neff_proposal.min():.0f}), against "
-              f"**{np.median(neff_sharp):.1f}** of {N_POP:,} before."),
+        mo.md(f"With the proposal, the median $N_\\mathrm{{eff}}$ is {np.median(neff_proposal):.0f} of "
+              f"{N_Q} draws (minimum {neff_proposal.min():.0f}), compared with "
+              f"{np.median(neff_sharp):.1f} of {N_POP:,} before."),
     ])
     return N_Q, neff_proposal
 
@@ -470,9 +473,9 @@ def _():
     mo.md(r"""
     ## Inference with the proposal and the selection term
 
-    `measurement.population_inference` takes the proposal through `proposal=`, and a custom
-    likelihood class through `likelihood_cls=`. It builds the likelihood itself, so extra
-    constructor arguments, here our injections, are bound with `functools.partial`.
+    `measurement.population_inference` takes the proposal through `proposal=` and a custom
+    likelihood class through `likelihood_cls=`. Because it builds the likelihood itself, extra
+    constructor arguments (here, the injections) are bound with `functools.partial`:
     """)
     return
 
@@ -506,30 +509,30 @@ def _(Lambda_true, fixed, starved):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    Back on target. The proposal costs a few dozen lines once, and every population run after that
-    is both cheaper ($N=500$) and correct.
+    With the proposal the truth is back inside the posterior. Writing the proposal takes a few
+    dozen lines, and after that every population run is both cheaper ($N=500$) and correct.
 
-    ## The one override point: `log_weights`
+    ## Overriding the weights
 
     Everything above used the default weight, implemented in
-    `PopulationLikelihood.log_weights(Lambda)`, which returns an `(E, N)` array:
+    `PopulationLikelihood.log_weights(Lambda)`. It returns an `(E, N)` array:
 
     * no proposal: $\log w = \log K$, with $\theta\sim p(\cdot\mid\Lambda)$;
-    * with a proposal: $\log w = \log K + \log p(\theta\mid\Lambda) - \log q(\theta\mid d)$, with $\theta\sim q$.
+    * with a proposal: $\log w = \log \mathcal{L} + \log p(\theta\mid\Lambda) - \log q(\theta\mid d)$, with $\theta\sim q$.
 
-    Sometimes you know something the default does not. The classic case: draw *some* parameters
-    from the population itself. If $q$ draws $\log_{10}L$ from $p(\log_{10}L\mid\Lambda)$, that factor
-    appears in both $p$ and $q$ and **cancels exactly**:
+    Sometimes you know something the default does not. A common case is drawing some of the
+    parameters from the population itself. If $q$ draws $\log_{10}L$ from $p(\log_{10}L\mid\Lambda)$,
+    that factor appears in both $p$ and $q$ and cancels:
 
     $$
     w = \frac{K\;p(\log_{10}L\mid\Lambda)\,p(r)}{q(r\mid d)\;p(\log_{10}L\mid\Lambda)}
       = \frac{K\;p(r)}{q(r\mid d)} .
     $$
 
-    Override `log_weights` to compute just that. Below, `FluxBlindProposal` reuses the distance block
-    and draws the luminosity with `GenerativeModel.sample(Lambda, key=...)`, which is an inverse-CDF
-    transform of uniforms and so smooth in $\Lambda$. (In GW population analyses this is how
-    poorly-measured spins are handled.)
+    Overriding `log_weights` lets you compute this reduced weight directly. Below,
+    `FluxBlindProposal` reuses the distance part of the parallax proposal and draws the luminosity
+    with `GenerativeModel.sample(Lambda, key=...)`, which is an inverse-CDF transform of uniforms
+    and so smooth in $\Lambda$. (GW population analyses handle poorly measured spins this way.)
     """)
     return
 
@@ -556,7 +559,7 @@ class FluxBlindProposal(ParallaxProposal):
 
 @app.class_definition
 class CancelledLikelihood(SelectedLikelihood):
-    """log w = log K + log p(r) - log q(r | d): the luminosity factor cancels."""
+    """log w = log L + log p(r) - log q(r | d): the luminosity factor cancels."""
 
     def __init__(self, *a, distance_model, **kw):
         super().__init__(*a, **kw)
@@ -565,7 +568,7 @@ class CancelledLikelihood(SelectedLikelihood):
     def log_weights(self, Lambda):
         theta = self.proposal_draws(Lambda)                 # (E, N) draws from q
         d = self.data.reshape_batch((self.E, 1))            # (E, 1), broadcasts against theta
-        return (self.log_kernel_at(theta)
+        return (self.log_likelihood_at(theta)
                 + self.distance_model.log_prob(theta.to_dict(), Lambda)
                 - self.proposal.log_q_distance(theta.distance, d))
 
@@ -588,13 +591,14 @@ def _(Lambda_true, N_Q, data, luminosity, neff_proposal, pop_model, selection, s
     |---|---|
     | largest difference in $\\log\\hat Z_i$, default vs cancelled weight | `{float(jnp.abs(_lz_default - _lz_cancel).max()):.1e}` |
     | gradient of $\\ln\\mathcal L$ through the $\\Lambda$-dependent draws is finite | `{all(bool(jnp.isfinite(v)) for v in _grad.values())}` |
-    | median $N_\\mathrm{{eff}}/N$, flux-blind proposal | **{float(jnp.median(_neff_blind)) / N_Q:.3f}** |
-    | median $N_\\mathrm{{eff}}/N$, parallax proposal | **{float(np.median(neff_proposal)) / N_Q:.3f}** |
+    | median $N_\\mathrm{{eff}}/N$, flux-blind proposal | {float(jnp.median(_neff_blind)) / N_Q:.3f} |
+    | median $N_\\mathrm{{eff}}/N$, parallax proposal | {float(np.median(neff_proposal)) / N_Q:.3f} |
 
     The two weights agree to rounding error, and the override never evaluates the cancelling
-    factor. Here, though, the flux-blind proposal is much *less* efficient: the sharp telescope pins
-    $\\log_{{10}}L$ to 0.02 dex, and the population spreads it over 0.7. Drawing from the population
-    pays off only for parameters the data barely constrain. To use it in a run, pass
+    factor. In this problem, though, the flux-blind proposal is much less efficient, because the
+    sharp telescope pins $\\log_{{10}}L$ to 0.02 dex while the population spreads it over 0.7.
+    Drawing from the population pays off only for parameters the data barely constrain. To use
+    it in a run, pass
     `likelihood_cls=partial(CancelledLikelihood, distance_model=..., **selection)` and
     `proposal=blind` to `population_inference`.
     """)
@@ -604,20 +608,20 @@ def _(Lambda_true, N_Q, data, luminosity, neff_proposal, pop_model, selection, s
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## Recap
+    ## Summary
 
-    * Population-draw integrals starve when the data are much narrower than the population.
-      **Check per-event $N_\mathrm{eff}$**; a few effective draws gives confident, wrong answers.
-    * A `Proposal` is a measurement process run backwards: `parameter_type` is the data,
-      `data_type` is $\theta$, and you write `sample_single(d, key, Lambda)` and
-      `logpdf_single(theta, d, Lambda)`. Draws must be smooth in `(key, Lambda)`.
-    * Pass it with `proposal=`; pass a custom likelihood with `likelihood_cls=`
-      (bind extra arguments with `functools.partial`).
-    * `log_weights(Lambda)` is the single override point for the weight, e.g. when a factor
-      shared by $p$ and $q$ cancels.
+    * Integrals over population draws break down when the data are much narrower than the
+      population. A few effective draws per event give confident, wrong answers, so check the
+      per-event $N_\mathrm{eff}$.
+    * A `Proposal` is a measurement process run backwards: `parameter_type` is the data class and
+      `data_type` is the parameter class. Its draws must be smooth in `(key, Lambda)`.
+    * The proposal goes in with `proposal=` and a custom likelihood with `likelihood_cls=`, with
+      extra arguments bound by `functools.partial`.
+    * To change the weight, for example when a factor shared by $p$ and $q$ cancels, override
+      `log_weights(Lambda)`.
 
-    So far every analysis started from raw data $d_i$. In **notebook 8** we start from what real
-    catalogs publish: each event's *posterior samples*, collected in a `Catalog`.
+    So far every analysis has started from the raw data $d_i$. Notebook 8 starts instead from what
+    real catalogs publish, the posterior samples of each event, collected in a `Catalog`.
     """)
     return
 
@@ -625,14 +629,14 @@ def _():
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## ✏️ Your turn: how wide should a proposal be?
+    ## Exercise: proposal width
 
     `ParallaxProposal(sharp, widen=k)` scales both proposal widths by $k$.
 
     1. For $k$ in `[0.3, 0.6, 1.0, 1.5, 3.0, 10.0]`, compute the median and minimum $N_\mathrm{eff}/N$
        over stars at the true $\Lambda$ (reuse `neff_per_star`).
-    2. Plot both against $k$ on a log axis. Where is the sweet spot?
-    3. Why does a proposal that is too *narrow* hurt the **minimum** most?
+    2. Plot both against $k$ on a log axis. Which $k$ works best?
+    3. Why does a proposal that is too narrow hurt the minimum most?
     """)
     return
 
@@ -645,7 +649,7 @@ def _():
 
 @app.cell(hide_code=True)
 def _():
-    mo.accordion({"💡 Show a solution": mo.md(r"""
+    mo.accordion({"Show a solution": mo.md(r"""
     ```python
     widths = [0.3, 0.6, 1.0, 1.5, 3.0, 10.0]
     medians, minima = [], []
@@ -663,11 +667,11 @@ def _():
     ax.legend()
     ```
 
-    Around $k\approx 1$ to $1.5$ is best. Too wide wastes draws in empty space, and the
-    efficiency falls roughly like $1/k^2$ (two dimensions). Too narrow is worse: $q$ no longer
-    covers the tails of $K\cdot p$, the rare draws that land there get enormous weights $p/q$,
-    and a single draw can dominate a star's sum. That shows up first in the minimum. A slightly
-    wide proposal is always the safer mistake.
+    Values of $k$ around 1 to 1.5 work best. A proposal that is too wide wastes draws in empty
+    space, and its efficiency falls roughly like $1/k^2$ (in two dimensions). One that is too
+    narrow is worse. It no longer covers the tails of $\mathcal{L}\cdot p$, the rare draws that land there
+    get very large weights $p/q$, and a single draw can dominate a star's sum, which shows up
+    first in the minimum. If in doubt, make the proposal slightly too wide rather than too narrow.
     """)})
     return
 

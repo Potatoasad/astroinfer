@@ -8,7 +8,7 @@ Layout (each layer only imports the ones above it):
     posterior     PosteriorData: posterior draws + sample stats + metadata
     generative    differentiable population models p(theta | Lambda)
     inference     likelihoods and gravpop-backed PE / population sampling
-    measurement   MeasurementProcess: the measurement model K(d | theta)
+    measurement   MeasurementProcess: the measurement model L(d | theta)
     representations  Fit/Fitter protocol, registry, the built-in raw representation
     catalog       Catalog of per-event posteriors and their representations
     detection     detection triggers P(detected | d) and injection tables

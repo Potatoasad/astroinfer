@@ -37,30 +37,30 @@ with app.setup:
     N_SIM = 5_000             # stars simulated in the volume
     N_EVENTS = 150            # detected stars used in the analysis
     N_DRAWS = 2_000           # Monte Carlo draws per star in the population likelihood
-    N_INJ = 50_000            # injections for the selection term
+    N_INJ = 50_000
 
 
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    # 6 · A flux-limited survey 🔭
+    # 6. A flux-limited survey
 
-    A telescope surveys a shell of stars between 0.5 and 2 kpc. For each star it measures a
-    **flux** and a **parallax**, but it only *catalogs* stars whose measured flux beats a limit.
-    Faint stars far away never make it in.
+    A telescope surveys a shell of stars between 0.5 and 2 kpc. For each star it measures a flux
+    and a parallax, but it only catalogs stars whose measured flux is above a limit, so faint stars
+    far away are never included.
 
-    We want the population of stellar luminosities, $p(\log_{10}L\mid\Lambda)$. If we feed the
-    cataloged stars into the hierarchical analysis of notebook 5 as if they were a fair sample,
-    we get the wrong answer: the catalog is biased towards bright stars. That is **Malmquist bias**,
-    and the fix is a *selection term*.
+    We want the population of stellar luminosities, $p(\log_{10}L\mid\Lambda)$. Since the catalog
+    is biased towards bright stars, feeding it into the hierarchical analysis of notebook 5 as if it
+    were a fair sample gives the wrong answer. This is *Malmquist bias*, and it is corrected with a
+    *selection term*.
 
     This notebook adds the last piece of the forward model,
 
     $$
-    \theta\;\xrightarrow{\;K(d\mid\theta)\;}\;d\;\xrightarrow{\;P(\mathrm{det}\mid d)\;}\;\text{in the catalog or not},
+    \theta\;\xrightarrow{\;\mathcal{L}(d\mid\theta)\;}\;d\;\xrightarrow{\;P(\mathrm{det}\mid d)\;}\;\text{in the catalog or not},
     $$
 
-    a **detection trigger**, and shows how to correct the population likelihood for it.
+    a *detection trigger*, and shows how to correct the population likelihood for it.
     """)
     return
 
@@ -68,15 +68,14 @@ def _():
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## The model, recapped
+    ## The model
 
-    Everything here is built from pieces you already know.
-
-    * $\theta$ = (log luminosity $\log_{10}L$, distance $r$ in kpc).
-    * $d$ = (measured log flux, measured parallax in mas). The flux falls off as $1/r^2$, so
-      $\log_{10}F = \log_{10}L - 2\log_{10}r$, and the parallax is $1/r$.
-    * The population: $\log_{10}L\sim\mathcal{TN}(\mu_L,\sigma_L)$, and stars uniform in volume,
-      $p(r)\propto r^2$, using the `PowerLaw` leaf from notebook 4.
+    The model uses only pieces from earlier notebooks. The parameters $\theta$ are the log
+    luminosity $\log_{10}L$ and the distance $r$ in kpc. The data $d$ are the measured log flux and
+    the measured parallax in mas. The flux falls off as $1/r^2$, so
+    $\log_{10}F = \log_{10}L - 2\log_{10}r$, and the parallax is $1/r$. The population is
+    $\log_{10}L\sim\mathcal{TN}(\mu_L,\sigma_L)$, with stars uniform in volume,
+    $p(r)\propto r^2$, using the `PowerLaw` leaf from notebook 4:
     """)
     return
 
@@ -167,9 +166,9 @@ def _():
     mo.md(r"""
     ## Detection triggers
 
-    A detection trigger answers one question: given the data $d$, what is the probability that
-    this star ends up in the catalog? Note that it reads the **data**, not $\theta$: the telescope
-    only knows what it measured. Noise can push a star over the limit, or under it.
+    A detection trigger gives the probability that a star ends up in the catalog, given its data
+    $d$. It depends on the data rather than on $\theta$, because the telescope only knows what it
+    measured. Noise can push a star over the limit or under it.
     """)
     return
 
@@ -177,18 +176,18 @@ def _():
 @app.cell(hide_code=True)
 def _():
     mo.callout(mo.md(r"""
-    **🧩 What you implement in a `DetectionTrigger`**
+    **What you implement in a `DetectionTrigger`**
 
-    | method | what it is |
+    | method | description |
     |---|---|
-    | `detection_probability(self, d)` | $P(\mathrm{det}\mid d)\in[0,1]$, **vectorised** over a batch of data |
+    | `detection_probability(self, d)` | $P(\mathrm{det}\mid d)\in[0,1]$, vectorised over a batch of data |
     | `selection_statistic(self, d)` *(optional)* | the number detection is based on (an SNR, a flux), recorded with injections |
     | `_display_rule()`, `_display_config()` *(optional)* | LaTeX lines and settings for the rich display |
 
-    Unlike a measurement process, a trigger works on a whole batch at once, and plain NumPy is
-    fine: detection is never differentiated. `d` arrives as your data class, a dict or a DataFrame,
-    and `d["log_flux"]` works for all three. You get `.detect(d, rng)` and
-    `.injections(measurement, draws, rng)` for free.
+    Unlike a measurement process, a trigger works on a whole batch at once. Plain NumPy is fine
+    here, since detection is never differentiated. `d` can arrive as your data class, a dict or a
+    DataFrame, and `d["log_flux"]` works for all three. The base class provides `.detect(d, rng)`
+    and `.injections(measurement, draws, rng)`.
 
     The built-in `ai.detection.ThresholdTrigger(threshold, statistic=...)` is a hard cut on one
     field of the data.
@@ -200,8 +199,8 @@ def _():
 def _():
     mo.md(r"""
     Our survey uses a hard cut, `ThresholdTrigger(-0.3, statistic="log_flux")`. Real surveys are
-    rarely that sharp, so here is a trigger of our own: a **soft** flux limit, where the detection
-    probability rises smoothly over a width $w$ around the limit.
+    rarely that sharp, so we also write a trigger of our own, a soft flux limit, where the detection
+    probability rises smoothly over a width $w$ around the limit:
     """)
     return
 
@@ -250,12 +249,12 @@ def _():
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## Simulate: truths → data → detection
+    ## Simulating the survey
 
-    There is no simulator object: the whole survey is three explicit lines. Draw true stars from
-    the population, observe every one of them, and ask the trigger which are detected.
-    `trigger.detect(d, rng)` returns a boolean mask, and a batched `Parameters` object can be indexed
-    with it.
+    There is no simulator object. The survey takes three lines: draw true stars from the
+    population, observe every one of them, and ask the trigger which are detected.
+    `trigger.detect(d, rng)` returns a boolean mask, which can be used to index a batched
+    `Parameters` object:
     """)
     return
 
@@ -269,9 +268,12 @@ def _(Lambda_true, pop_model, telescope, trigger):
     keep = np.flatnonzero(detected)[:N_EVENTS]
     data, detected_truths = observed[keep], truths[keep]
 
-    mo.md(f"**{detected.sum():,}** of {N_SIM:,} stars are detected ({detected.mean():.0%}). "
-          f"The analysis uses the first **{len(keep)}**: `data.batch_shape = {data.batch_shape}`.")
-    return data, detected, detected_truths, observed, truths
+    mo.vstack([
+        mo.md(f"{detected.sum():,} of {N_SIM:,} stars are detected ({detected.mean():.0%}). "
+              f"The analysis uses the first {len(keep)}, a batch of {len(keep)} observations:"),
+        data,
+    ])
+    return data, detected, detected_truths, truths
 
 
 @app.cell
@@ -289,7 +291,7 @@ def _(detected, truths):
     _ax.plot(_rr, -0.3 + 2 * np.log10(_rr), color=style.INK, linewidth=1.4,
              label="flux limit")
     _ax.set(xlabel="distance $r$ [kpc]", ylabel=r"$\log_{10}L$", ylim=(-2.5, 2.5),
-            title="Far away, only bright stars make the cut")
+            title="Detected and missed stars")
     _ax.legend(loc="lower right", markerscale=3)
 
     _bins = np.linspace(-2.5, 2.5, 50)
@@ -304,16 +306,15 @@ def _(detected, truths):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    A few detected stars sit just below the line: noise pushed their *measured* flux over the
-    limit. Overall the detected stars are about half a dex brighter than the population they came
-    from. Let's see
-    what a naive analysis makes of that.
+    At large distances only bright stars are detected. A few detected stars sit just below the
+    line, because noise pushed their measured flux over the limit. Overall the detected stars are
+    about half a dex brighter than the population they came from.
 
     ## The naive analysis
 
-    Exactly notebook 5: hyperpriors on $\Lambda=(\mu_L,\sigma_L)$ and
-    `telescope.population_inference`. First the habitual check of the Monte Carlo integrals at the
-    true $\Lambda$.
+    First we ignore selection and repeat the analysis of notebook 5, with hyperpriors on
+    $\Lambda=(\mu_L,\sigma_L)$ and `telescope.population_inference`. As before, we start by
+    checking the Monte Carlo integrals at the true $\Lambda$:
     """)
     return
 
@@ -325,7 +326,7 @@ def _(Lambda_true, data, pop_model, telescope):
     _check = ai.PopulationLikelihood(telescope, data, pop_model, N=N_DRAWS, seed=3)
     _, _neff = jax.jit(_check.event_logpdf_and_neff)(Lambda_true)
     mo.md(f"Per-star $N_\\mathrm{{eff}}$ out of {N_DRAWS:,} draws: median "
-          f"**{float(jnp.median(_neff)):.0f}**, minimum **{float(_neff.min()):.0f}**. Healthy.")
+          f"{float(jnp.median(_neff)):.0f}, minimum {float(_neff.min()):.0f}, which is plenty.")
     return (hyper_priors,)
 
 
@@ -341,24 +342,25 @@ def _(data, hyper_priors, pop_model, telescope):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    The truth is $\mu_L=0$, $\sigma_L=0.7$. The naive analysis is confidently wrong: it finds the
-    population of *detected* stars, which is brighter and narrower.
+    The truth is $\mu_L=0$, $\sigma_L=0.7$. The naive analysis is confident and wrong, because it
+    recovers the population of detected stars, which is brighter and narrower.
 
     ## The selection term
 
-    The likelihood of notebook 5 multiplies, for each star, the probability of its data. But our
-    data are not "a star's data", they are "a star's data, **given that it was detected**". Each
-    factor must be normalised by the probability of detection:
+    The likelihood of notebook 5 multiplies together the probability of each star's data. Our
+    catalog only contains detected stars, though, so each factor should be the probability of the
+    data given that the star was detected. That means dividing each factor by the probability of
+    detection:
 
     $$
     \mathcal L(\Lambda)=\prod_{i=1}^{E}\frac{Z_i(\Lambda)}{\alpha(\Lambda)},
     \qquad
-    \alpha(\Lambda)=\iint P(\mathrm{det}\mid d)\,K(d\mid\theta)\,p(\theta\mid\Lambda)\;\mathrm d d\,\mathrm d\theta .
+    \alpha(\Lambda)=\iint P(\mathrm{det}\mid d)\,\mathcal{L}(d\mid\theta)\,p(\theta\mid\Lambda)\;\mathrm d d\,\mathrm d\theta .
     $$
 
     $\alpha(\Lambda)$ is the fraction of the population that the survey can see. A population full of
-    faint stars has a small $\alpha$, and that is exactly what the naive analysis was missing: it
-    did not pay a price for proposing populations in which detection would have been *likely*.
+    faint stars has a small $\alpha$. The naive analysis left this factor out, so it was never
+    penalised for proposing populations in which detection would have been likely.
 
     ### Estimating $\alpha(\Lambda)$ with injections
 
@@ -369,8 +371,9 @@ def _():
     \hat\alpha(\Lambda)=\frac{1}{N_\mathrm{inj}}\sum_{j\ \in\ \text{found}}\frac{p(\theta_j\mid\Lambda)}{g(\theta_j)} .
     $$
 
-    `trigger.injections(measurement, draws, rng)` does the simulate-and-trigger step: hand it a
-    DataFrame of draws (with $g$'s density in a `prior` column) and it returns the injection table.
+    `trigger.injections(measurement, draws, rng)` does the simulation and detection. It takes a
+    DataFrame of draws, with the density of $g$ in a `prior` column, and returns the injection
+    table:
     """)
     return
 
@@ -384,7 +387,7 @@ def _(pop_model, telescope, trigger):
 
     injections = trigger.injections(telescope, g_table, np.random.default_rng(6))
     injections.head()
-    return g_table, injections
+    return (injections,)
 
 
 @app.cell
@@ -392,19 +395,20 @@ def _(injections):
     found = injections[injections.detected]
     injections_found = {k: jnp.asarray(found[k].to_numpy()) for k in ["log_L", "distance"]}
     log_g = jnp.log(jnp.asarray(found["prior"].to_numpy()))
-    mo.md(f"**{len(found):,}** of {len(injections):,} injections are found.")
+    mo.md(f"{len(found):,} of {len(injections):,} injections are found.")
     return injections_found, log_g
 
 
 @app.cell(hide_code=True)
 def _():
-    mo.callout(mo.md(r"""
-    **🧩 Customising the population likelihood: subclass it.**
-    `PopulationLikelihood.logpdf(Lambda)` returns $\sum_i\log\hat Z_i(\Lambda)$. Override it, call
-    `super().logpdf(Lambda)`, and add whatever extra terms your problem needs. Here: $-E\log\hat\alpha$.
-    The subclass's extra `__init__` arguments carry the injections. Everything stays a JAX function
-    of $\Lambda$, so NUTS still gets gradients.
-    """), kind="info")
+    mo.md(r"""
+    ### Subclassing the population likelihood
+
+    `PopulationLikelihood.logpdf(Lambda)` returns $\sum_i\log\hat Z_i(\Lambda)$. To add terms to
+    the likelihood, subclass it, override `logpdf`, call `super().logpdf(Lambda)` and add the extra
+    terms, here $-E\log\hat\alpha$. The injections are passed in as extra `__init__` arguments.
+    Everything stays a JAX function of $\Lambda$, so NUTS still gets gradients.
+    """)
     return
 
 
@@ -438,17 +442,18 @@ def _(Lambda_true, data, injections_found, log_g, pop_model, telescope):
     )
     _alpha = float(jnp.exp(selected_likelihood.log_alpha(Lambda_true)))
     _neff = float(selected_likelihood.selection_neff(Lambda_true))
-    mo.md(f"At the true $\\Lambda$: $\\hat\\alpha$ = **{_alpha:.3f}** (compare the detected fraction "
+    mo.md(f"At the true $\\Lambda$, $\\hat\\alpha$ = {_alpha:.3f} (compare the detected fraction "
           f"of the simulation above), and the selection estimate rests on $N_\\mathrm{{eff}}$ = "
-          f"**{_neff:,.0f}** injections (want $\\gg 4E$ = {4 * N_EVENTS}).")
+          f"{_neff:,.0f} injections. This should be well above $4E$ = {4 * N_EVENTS}.")
     return (selected_likelihood,)
 
 
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    `telescope.population_inference` builds a plain `PopulationLikelihood` for you. With a likelihood
-    object of your own, call the sampler directly with `ai.run_sampler(likelihood, priors, ...)`.
+    `telescope.population_inference` always builds a plain `PopulationLikelihood`. To use a
+    likelihood object of your own, call the sampler directly with
+    `ai.run_sampler(likelihood, priors, ...)`:
     """)
     return
 
@@ -478,9 +483,9 @@ def _(Lambda_true, corrected, naive):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    With the selection term the truth is back inside the posterior. Notice the long diagonal
-    ridge: a lower mean with a wider spread fits just as well. Why? Plot the inferred
-    luminosity functions:
+    With the selection term the truth is back inside the posterior. The posterior also has a long
+    diagonal ridge, along which a lower mean with a wider spread fits almost as well. To see where
+    the ridge comes from, we plot the inferred luminosity functions:
     """)
     return
 
@@ -511,25 +516,24 @@ def _(Lambda_true, corrected, detected_truths, naive):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    All the corrected curves agree on the **bright side**, where the survey sees stars, and fan out
-    on the **faint side**, where it sees almost nothing. Selection effects can remove a bias, but
-    they cannot conjure up information about stars you never detected: the faint tail is constrained
-    only through the *number* of stars you did not see, via $\alpha(\Lambda)$.
+    The corrected curves agree on the bright side, where the survey sees stars, and fan out on the
+    faint side, where it sees almost nothing. Correcting for selection can remove a bias, but it
+    cannot recover information about stars that were never detected. The faint tail is constrained
+    only through the number of stars the survey did not see, via $\alpha(\Lambda)$.
 
-    ## Recap
+    ## Summary
 
-    * A `DetectionTrigger` implements `detection_probability(d)` (vectorised, NumPy is fine) and
-      optionally `selection_statistic(d)`. `ThresholdTrigger` is the built-in hard cut.
-    * Simulating a survey is three explicit lines: `pop_model.sample` → `measurement.sample` →
-      `trigger.detect`, then index the data with the mask.
-    * `trigger.injections(measurement, draws, rng)` scatters draws from a broad $g$ once and
-      records detection; found injections give $\hat\alpha(\Lambda)$.
-    * Customise the population likelihood by **subclassing** `PopulationLikelihood` and overriding
-      `logpdf`; run it with `ai.run_sampler`.
-    * Check both Monte Carlo integrals: per-event $N_\mathrm{eff}$ and selection $N_\mathrm{eff}$.
+    * A `DetectionTrigger` implements `detection_probability(d)`, vectorised and in plain NumPy,
+      and optionally `selection_statistic(d)`. `ThresholdTrigger` is the built-in hard cut.
+    * A simulated survey is `pop_model.sample`, then `measurement.sample`, then `trigger.detect`,
+      followed by indexing the data with the mask.
+    * `trigger.injections(measurement, draws, rng)` simulates and detects draws from a broad $g$;
+      the found injections give $\hat\alpha(\Lambda)$.
+    * Extra likelihood terms go in a subclass of `PopulationLikelihood` that overrides `logpdf`,
+      run with `ai.run_sampler`. Check both the per-event and the selection $N_\mathrm{eff}$.
 
-    In **notebook 7** we buy a much better telescope, and the population-draw integrals stop
-    working. The fix is a `Proposal`.
+    In notebook 7 the telescope gets much sharper, and the population-draw integrals stop working
+    until we add a `Proposal`.
     """)
     return
 
@@ -537,16 +541,15 @@ def _():
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## ✏️ Your turn: a softer survey
+    ## Exercise: a softer survey
 
-    Real flux limits are fuzzy. Redo the analysis with `SoftFluxLimit(threshold=-0.3, width=0.1)`
-    in place of the hard cut.
+    Redo the analysis with `SoftFluxLimit(threshold=-0.3, width=0.1)` in place of the hard cut.
 
-    1. Re-detect the *same* `observed` stars with the soft trigger and keep the first 150.
+    1. Re-detect the same `observed` stars with the soft trigger and keep the first 150.
     2. Rebuild the injection table with the soft trigger.
     3. Run the selection-corrected inference. Which lines of code changed?
-    4. Bonus: what goes wrong if you use the soft trigger for the catalog but the *hard* trigger
-       for the injections?
+    4. What goes wrong if you use the soft trigger for the catalog but the hard trigger for the
+       injections?
     """)
     return
 
@@ -559,7 +562,7 @@ def _():
 
 @app.cell(hide_code=True)
 def _():
-    mo.accordion({"💡 Show a solution": mo.md(r"""
+    mo.accordion({"Show a solution": mo.md(r"""
     ```python
     soft = SoftFluxLimit(threshold=-0.3, width=0.1)
 
@@ -579,10 +582,10 @@ def _():
                                   num_warmup=300, num_samples=1000, summary=False).samples
     ```
 
-    Only the trigger changed: the likelihood never looks inside it. With mismatched triggers
-    (bonus), $\hat\alpha$ describes a different survey from the one that made the catalog, and
-    the bias creeps back in. The injections must go through *exactly* the detection process
-    the data went through.
+    Only the trigger changed, because the likelihood never looks inside it. With mismatched
+    triggers (question 4), $\hat\alpha$ describes a different survey from the one that made the
+    catalog, and the bias comes back. The injections have to go through the same detection process
+    as the data.
     """)})
     return
 

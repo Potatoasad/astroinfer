@@ -1,7 +1,7 @@
 [project]
-name = "astroinfer-gwmockcat"
+name = "astroinfer-gw"
 version = "0.1.0"
-description = "GWMockCat-style mock gravitational-wave catalogs for astroinfer"
+description = "Gravitational-wave models for astroinfer, including GWMockCat-style mock catalogs"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

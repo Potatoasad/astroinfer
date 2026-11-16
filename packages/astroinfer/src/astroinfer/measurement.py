@@ -1,4 +1,4 @@
-"""The measurement model K(d | theta).
+"""The measurement model L(d | theta).
 
 Users subclass ``MeasurementProcess`` and write the *unbatched* physics:
 ``sample_single(theta, key)`` and ``logpdf_single(d, theta)``. The base class
@@ -17,7 +17,7 @@ import jax
 import numpy as np
 import pandas as pd
 
-from .display import RichDisplay, inline_math, kv_table, math_block
+from .display import RichDisplay, details_open, inline_math, kv_table, math_block
 from .inference.sampling import parameter_estimation, population_inference
 from .parameters import coerce
 
@@ -35,7 +35,7 @@ def _default_key():
 @dataclass(eq=False)
 class MeasurementProcess(RichDisplay):
     """
-    Measurement model K(d | theta).
+    Measurement model L(d | theta).
 
     Subclasses define:
         parameter_type
@@ -113,7 +113,7 @@ class MeasurementProcess(RichDisplay):
 
     def sample(self, theta, key=None, *, N=None, **context):
         """
-        Draw observations d ~ K(d | theta).
+        Draw observations d ~ L(d | theta).
 
         **context:
             Extra keyword arguments forwarded unchanged to every
@@ -184,7 +184,7 @@ class MeasurementProcess(RichDisplay):
 
     def logpdf(self, d, theta, *, outer=False, **context):
         """
-        Compute log K(d | theta).
+        Compute log L(d | theta).
 
         **context is forwarded unchanged to every ``logpdf_single`` call.
 
@@ -298,7 +298,7 @@ class MeasurementProcess(RichDisplay):
     # ========================================================
 
     def _display_equations(self) -> list[str]:
-        """LaTeX lines describing K(d | theta), shown under "Model"."""
+        """LaTeX lines describing L(d | theta), shown under "Model"."""
         return []
 
     def _display_config(self) -> dict:
@@ -351,7 +351,7 @@ class MeasurementProcess(RichDisplay):
         )
 
         lines = [
-            '<details style="font-family:inherit;line-height:1.6">',
+            '<details' + details_open() + ' style="font-family:inherit;line-height:1.6">',
             '<summary style="cursor:pointer;padding:0.25em 0">',
             (
                 '<span style="display:inline-flex;'

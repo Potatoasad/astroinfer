@@ -1,4 +1,5 @@
-"""GW source physics for GWMockCat-style mock catalogs.
+"""Gravitational-wave source physics: mass and spin conversions, the luminosity
+distance and comoving volume, and the projection factor.
 
 All functions take numpy or jnp inputs (and traced JAX values), so they
 work on arrays, inside vmapped measurement methods, and inside samplers.
@@ -41,12 +42,13 @@ def effective_spins(theta):
 
 
 # ============================================================
-# Cosmology and SNR
+# Cosmology
 # ============================================================
 
 class RedshiftToLuminosityDistance:
     """Luminosity distance of an astropy cosmology, tabulated in z (fast, and
-    usable inside the sampler). Default: Planck15."""
+    usable inside the sampler), with its inverse, its derivative and the
+    differential comoving volume. Default: Planck15."""
 
     def __init__(self, cosmology=None, z_max=5.0, n_grid=5_000):
         if cosmology is None:
@@ -54,6 +56,8 @@ class RedshiftToLuminosityDistance:
         self.z_max = float(z_max)
         self.z = np.linspace(0, z_max, n_grid + 1)
         self.d_L = cosmology.luminosity_distance(self.z).to("Mpc").value
+        self.dd_L_dz = np.gradient(self.d_L, self.z, edge_order=2)
+        self.dV_c_dz = 4 * np.pi * cosmology.differential_comoving_volume(self.z).to("Mpc3 / sr").value
 
     def __repr__(self):
         return f"RedshiftToLuminosityDistance(z_max={self.z_max})"
@@ -62,38 +66,17 @@ class RedshiftToLuminosityDistance:
         """d_L(z) in Mpc."""
         return jnp.interp(z, self.z, self.d_L)
 
+    def redshift(self, luminosity_distance):
+        """z(d_L), the inverse of ``luminosity_distance``; d_L in Mpc."""
+        return jnp.interp(luminosity_distance, self.d_L, self.z)
 
-class ToyOptimalSNR:
-    """rho_opt(theta): the SNR of an optimally oriented source in one detector;
-    a made-up stand-in for the PSD integral GWMockCat does with the O3 LIGO
-    Livingston PSD.
+    def luminosity_distance_derivative(self, z):
+        """dd_L/dz in Mpc."""
+        return jnp.interp(z, self.z, self.dd_L_dz)
 
-        rho_opt = reference_snr * (Mc_det / reference_chirp_mass)^(5/6)
-                  * (bns_horizon / d_L) / (1 + (M_det / m_cut)^2)
-
-    The first factors are the inspiral scaling, normalized so a
-    Mc_det = 1.2 Msun BNS is at ``reference_snr`` at ``bns_horizon`` Mpc. The
-    last is a roll-off for heavy binaries whose merger leaves the band. The
-    defaults are roughly one O3 detector: a 300 Mpc BNS horizon puts a
-    30+30 Msun BBH at SNR ~ 20 at 1.6 Gpc (optimally oriented).
-    """
-
-    def __init__(self, bns_horizon=300.0, reference_snr=8.0, reference_chirp_mass=1.2, m_cut=250.0):
-        self.bns_horizon = float(bns_horizon)
-        self.reference_snr = float(reference_snr)
-        self.reference_chirp_mass = float(reference_chirp_mass)
-        self.m_cut = float(m_cut)
-
-    def __repr__(self):
-        return (f"ToyOptimalSNR(bns_horizon={self.bns_horizon}, reference_snr={self.reference_snr}, "
-                f"m_cut={self.m_cut})")
-
-    def __call__(self, theta):
-        """``theta`` needs chirp_mass_det, luminosity_distance and mass_ratio."""
-        chirp_mass, d_L = theta["chirp_mass_det"], theta["luminosity_distance"]
-        total_mass = total_mass_from_chirp_mass(chirp_mass, theta["mass_ratio"])
-        return (self.reference_snr * (chirp_mass / self.reference_chirp_mass) ** (5 / 6)
-                * (self.bns_horizon / d_L) / (1 + (total_mass / self.m_cut) ** 2))
+    def differential_comoving_volume(self, z):
+        """dV_c/dz over the whole sky, in Mpc^3."""
+        return jnp.interp(z, self.z, self.dV_c_dz)
 
 
 # ============================================================

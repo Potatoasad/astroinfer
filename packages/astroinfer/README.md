@@ -1,5 +1,7 @@
 # astroinfer
 
+<img src="https://raw.githubusercontent.com/Potatoasad/astroinfer/main/assets/astroinfer-logo.png" alt="astroinfer" width="320">
+
 Typed forward models and hierarchical inference in JAX.
 
 You describe parameters and data with `@parameter_dataclass`, write a `MeasurementProcess`

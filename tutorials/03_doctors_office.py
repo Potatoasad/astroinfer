@@ -29,21 +29,19 @@ with app.setup:
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    # 3 · The doctor's office 🩺
+    # 3. The doctor's office
 
-    A patient walks into a doctor's office. The doctor is in a hurry and writes down only one number:
-    the patient's **BMI**, $w/h^2$, measured with a little noise. What can we say about the patient's
-    weight $w$ and height $h$?
+    A patient walks into a doctor's office. The doctor is in a hurry and writes down only one
+    number, the patient's BMI, $w/h^2$, measured with a little noise. What can we say about the
+    patient's weight $w$ and height $h$?
 
-    Not much from one number, as you'll see. But the office has a quirk: its doorways are of different
-    heights, and the receptionist notes whether the patient **ducks** under each one. That turns
-    out to be worth a lot.
+    As we'll see, one number does not say much. The office has doorways of different heights,
+    though, and the receptionist notes whether the patient ducks under each one. Those notes turn
+    out to carry a lot of information.
 
-    Along the way this notebook covers:
-
-    * **derived parameters**: quantities like BMI that are functions of $\theta$;
-    * what `.PE(..., as_posterior=True)` returns, a **`PosteriorData`**, and everything you can do with it;
-    * **custom rich displays** for your measurement processes and for any object of your own.
+    Along the way the notebook covers derived parameters (quantities like BMI that are functions
+    of $\theta$), the `PosteriorData` object that `.PE(..., as_posterior=True)` returns, and custom
+    displays for measurement processes and for any object of your own.
     """)
     return
 
@@ -67,28 +65,26 @@ class Chart:
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## The measurement, with two optional extras
+    ## The measurement
 
-    The physics is one line: $\widehat{\mathrm{BMI}}\sim\mathcal N(w/h^2,\ \sigma^2)$. The class below
-    also overrides three **optional** hooks.
+    The measurement model is $\widehat{\mathrm{BMI}}\sim\mathcal N(w/h^2,\ \sigma^2)$. Besides
+    `sample_single` and `logpdf_single`, the class below overrides three optional methods:
     """)
     return
 
 
 @app.cell(hide_code=True)
 def _():
-    mo.callout(mo.md(r"""
-    **🧩 Optional hooks on a `MeasurementProcess`**
-
-    | hook | what it does |
+    mo.md(r"""
+    | method | description |
     |---|---|
-    | `derived_parameters(self, theta)` | gets `{name: array}` of $\theta$, returns `{name: array}` of extra quantities. They are added to PE output and to `with_derived(table)`. |
-    | `_display_equations(self)` | list of LaTeX lines shown under *Model* in the rich display |
-    | `_display_config(self)` | `{label: value}` shown under *Configuration* (default: the dataclass fields) |
+    | `derived_parameters(self, theta)` | takes `{name: array}` for $\theta$ and returns `{name: array}` of extra quantities, which are added to the PE output and to `with_derived(table)` |
+    | `_display_equations(self)` | a list of LaTeX lines shown under *Model* in the display |
+    | `_display_config(self)` | `{label: value}` shown under *Configuration* (by default, the dataclass fields) |
 
-    `derived_parameters` receives plain arrays (it is applied to tables of draws), so write it with
-    array maths and don't assume a `Person` object.
-    """), kind="info")
+    `derived_parameters` is applied to tables of draws, so it receives plain arrays rather than a
+    `Person`. Write it with array operations.
+    """)
     return
 
 
@@ -128,8 +124,9 @@ def _():
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    Expand it: the *Model* line and the *Configuration* table come from the two display hooks.
-    `with_derived` adds the derived columns to any table that has the parameter columns:
+    In the expanded display, the *Model* line and the *Configuration* table come from the two
+    display methods. `with_derived` adds the derived columns to any table that has the parameter
+    columns:
     """)
     return
 
@@ -145,11 +142,10 @@ def _(office):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## Parameter estimation, returning a `PosteriorData`
+    ## Parameter estimation
 
-    Our first patient is 62 kg and 1.75 m. The PE prior describes the people who walk in:
-    $w\sim\mathcal N(75, 15)$ kg and $h\sim\mathcal N(1.70, 0.10)$ m, truncated to sensible values.
-    With `as_posterior=True`, `.PE` returns a `PosteriorData` instead of a DataFrame.
+    Our first patient weighs 62 kg and is 1.75 m tall. The office measures their BMI, and the chart
+    is all we get to see:
     """)
     return
 
@@ -158,29 +154,44 @@ def _():
 def _(office):
     patient = Person(weight=62.0, height=1.75)
     chart = office.sample(patient, key=1)
+    mo.hstack([patient, chart], justify="start", gap=2, align="start")
+    return chart, patient
 
+
+@app.cell(hide_code=True)
+def _():
+    mo.md(r"""
+    The PE prior describes the people who come into the office, $w\sim\mathcal N(75, 15)$ kg and
+    $h\sim\mathcal N(1.70, 0.10)$ m, truncated to sensible values. With `as_posterior=True`, `.PE`
+    returns a `PosteriorData` instead of a DataFrame:
+    """)
+    return
+
+
+@app.cell
+def _(chart, office):
     pe_priors = dict(
         weight=dist.TruncatedNormal(75.0, 15.0, low=30.0, high=200.0),
         height=dist.TruncatedNormal(1.70, 0.10, low=1.0, high=2.5),
     )
     posterior = office.PE(chart, pe_priors, seed=0, num_samples=4000, as_posterior=True)
     posterior
-    return chart, patient, pe_priors, posterior
+    return pe_priors, posterior
 
 
 @app.cell(hide_code=True)
 def _():
-    mo.callout(mo.md(r"""
-    **📦 Anatomy of a `PosteriorData`** (expand the object above to see each part)
+    mo.md(r"""
+    A `PosteriorData` has five parts, which you can see by expanding the object above:
 
-    | attribute | what it holds | here |
+    | attribute | contents | here |
     |---|---|---|
-    | `theta` | the draws, as **your** parameter type with batch shape `(n_draws,)` | a `Person` |
+    | `theta` | the draws, as your parameter type with batch shape `(n_draws,)` | a `Person` |
     | `sample_stats` | per-draw inference quantities | `log_likelihood`, `prior`, `log_prior[weight]`, `log_prior[height]` |
-    | `extras` | other per-draw columns, e.g. derived parameters | `BMI`, `weight_lb` |
-    | `metadata` | run-level information | sampler, seed, number of draws |
+    | `extras` | other per-draw columns, such as derived parameters | `BMI`, `weight_lb` |
+    | `metadata` | information about the run | sampler, seed, number of draws |
     | `observed_data` | the $d$ the posterior is conditioned on | a `Chart` |
-    """), kind="neutral")
+    """)
     return
 
 
@@ -208,7 +219,7 @@ def _(chart, patient, posterior):
     bmi_contours(_ax, observed=float(chart.BMI))
     plot_people(_ax, posterior.theta, color=style.POSTERIOR, label="posterior")
     mark_truth(_ax, patient)
-    _ax.set_title("BMI alone pins down a curve, not a person")
+    _ax.set_title("Posterior from the BMI alone")
     _ax.legend(loc="upper left", bbox_to_anchor=(1.0, 1.0))
     _fig
     return bmi_contours, mark_truth, plot_people
@@ -217,14 +228,16 @@ def _(chart, patient, posterior):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    The posterior is a sliver along the curve $w/h^2 = \widehat{\mathrm{BMI}}$; where we sit *along*
-    the curve comes only from the prior. Note `posterior.theta` is a `Person`, so `plot_people` just
-    reads `.weight` and `.height`, and `posterior.theta.bmi()` works too.
+    The posterior is a narrow band along the curve $w/h^2 = \widehat{\mathrm{BMI}}$. The BMI
+    fixes which curve the patient is on, but the position along the curve comes only from the
+    prior. `posterior.theta` is a `Person`, so `plot_people` can read `.weight` and `.height`
+    directly, and `posterior.theta.bmi()` works as well.
 
     ## Working with a `PosteriorData`
 
-    Index it **by name** to get any column (parameter, sample stat or extra), or **by draw** (int,
-    slice, boolean mask) to get a smaller `PosteriorData` with every per-draw array sliced together.
+    Indexing by name returns a column, whether it is a parameter, a sample statistic or an extra.
+    Indexing by draw (an integer, a slice or a boolean mask) returns a smaller `PosteriorData`, with
+    every per-draw array sliced the same way:
     """)
     return
 
@@ -250,9 +263,10 @@ def _(posterior):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    It converts to and from a DataFrame. `from_dataframe` sorts columns back into `theta`,
-    `sample_stats` (recognised names such as `prior`, `log_prior[...]`, `log_likelihood`) and
-    `extras` (everything else). That's how you bring in posteriors from any other sampler.
+    A `PosteriorData` can be converted to and from a DataFrame. `from_dataframe` sorts the columns
+    back into `theta`, `sample_stats` (recognised names such as `prior`, `log_prior[...]` and
+    `log_likelihood`) and `extras` (everything else). You can use it to bring in posteriors from
+    other samplers:
     """)
     return
 
@@ -269,12 +283,13 @@ def _(posterior):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ### Priors of a subset: `marginal_prior`
+    ### The prior of a subset of columns
 
-    PE stores the prior density of every draw both as a whole (`prior`) and **factor by factor**
-    (`log_prior[weight]`, `log_prior[height]`). Later, a catalog may export only some columns of a
-    posterior and needs the prior of *just those*. `marginal_prior(columns)` builds it from the
-    factors, and refuses when it can't (a derived column like BMI has no stored prior):
+    PE stores the prior density of every draw both as a whole (`prior`) and factor by factor
+    (`log_prior[weight]`, `log_prior[height]`). A catalog may later export only some columns of a
+    posterior, and then it needs the prior of those columns alone. `marginal_prior(columns)` builds
+    it from the factors. It raises an error when it cannot, for example for a derived column like
+    BMI, which has no stored prior:
     """)
     return
 
@@ -300,10 +315,11 @@ def _(pe_priors, posterior):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ### Identity: `content_hash`
+    ### Content hash
 
-    `content_hash()` is a fingerprint of every per-draw array. Catalogs (notebook 8) use it to notice
-    when a posterior has changed and anything fit to it is out of date.
+    `content_hash()` is a hash of every per-draw array. Catalogs (notebook 8) use it to detect when
+    a posterior has changed, so that anything fitted to it is known to be out of date. Slicing the
+    posterior changes the hash:
     """)
     return
 
@@ -324,13 +340,14 @@ def _(posterior):
 def _():
     mo.md(r"""
     ---
-    ## The doorways 🚪
+    ## The doorways
 
     The office has doorways of heights $1.55, 1.65, 1.75, 1.85$ m, and the patient walks through
     each of them three times. Someone of height $h$ ducks under a door of height $H_i$ with
-    probability $\sigma\!\left(\frac{h - H_i}{s}\right)$ (a logistic curve of width $s = 3$ cm).
+    probability $\sigma\!\left(\frac{h - H_i}{s}\right)$, a logistic curve of width $s = 3$ cm.
 
-    The data gain a second field with a core axis `"door"`: twelve yes/no observations.
+    The data class gets a second field with a core axis `"door"`, holding the twelve yes/no
+    observations.
     """)
     return
 
@@ -391,7 +408,7 @@ def _():
     _fig, _ax = plt.subplots(figsize=(6.4, 2.6))
     for _i, (_H, _color) in enumerate(zip(sorted(set(office_with_doors.door_heights)), style.SERIES)):
         _ax.plot(_h, _p[:, _i], color=_color, label=f"door $H = {_H}$ m")
-    _ax.set(xlabel="patient height $h$ [m]", ylabel="P(duck)", title="Who ducks where")
+    _ax.set(xlabel="patient height $h$ [m]", ylabel="P(duck)", title="Probability of ducking under each door")
     _ax.legend(loc="upper left", bbox_to_anchor=(1.0, 1.0))
     mo.vstack([office_with_doors, _fig])
     return (office_with_doors,)
@@ -412,9 +429,9 @@ def _(office_with_doors):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    Run PE twice on the same visit: once with everything, and once with only the BMI (build a
-    `Chart` from the same number). We also stamp the patient's name into the metadata with
-    `dataclasses.replace`, since `PosteriorData` is a dataclass.
+    We run PE twice on the same visit, once with all the data and once with only the BMI (a `Chart`
+    built from the same number). `PosteriorData` is a dataclass, so we can add the patient's name
+    to the metadata with `dataclasses.replace`:
     """)
     return
 
@@ -444,7 +461,7 @@ def _(
     plot_people(_ax, bmi_only.theta, color=style.PRIOR, label="BMI only")
     plot_people(_ax, with_doors.theta, color=style.POSTERIOR, label="BMI + doors")
     mark_truth(_ax, second_patient)
-    _ax.set_title("Twelve yes/no answers pin the height")
+    _ax.set_title("Posteriors with and without the doorways")
     _ax.legend(loc="upper left", bbox_to_anchor=(1.0, 1.0))
     _fig
     return
@@ -453,11 +470,14 @@ def _(
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
+    The twelve yes/no answers from the doorways pin down the height, which the BMI alone could not
+    do.
+
     ---
     ## A display for your own objects
 
-    Anything can get the collapsible, maths-headed display astroinfer objects use: subclass
-    `ai.RichDisplay` and fill in three methods.
+    Any class can have the collapsible display, with a LaTeX header, that astroinfer objects use.
+    Subclass `ai.RichDisplay` and fill in three methods.
     """)
     return
 
@@ -465,16 +485,16 @@ def _():
 @app.cell(hide_code=True)
 def _():
     mo.callout(mo.md(r"""
-    **🧩 What you implement in a `RichDisplay`**
+    **What you implement in a `RichDisplay`**
 
     | method | returns |
     |---|---|
-    | `_display_title(self)` | the bold title |
+    | `_display_title(self)` | the title |
     | `_display_math(self)` | LaTeX shown next to the title (or `None`) |
-    | `_display_body(self)` | HTML shown when expanded |
+    | `_display_body(self)` | HTML shown when the display is expanded |
 
-    `astroinfer.display` has small HTML helpers you can reuse, e.g. `kv_table({label: value})` and
-    `html_table(header, rows)`.
+    `astroinfer.display` has small HTML helpers you can use in the body, such as
+    `kv_table({label: value})` and `html_table(header, rows)`.
     """), kind="info")
     return
 
@@ -512,20 +532,19 @@ def _(bmi_only, with_doors):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## Recap
+    ## Summary
 
-    * `derived_parameters(theta)` adds functions of $\theta$ to PE output (`extras`) and to
+    * `derived_parameters(theta)` adds functions of $\theta$ to the PE output (as `extras`) and to
       `with_derived(table)`.
-    * `PE(..., as_posterior=True)` returns a `PosteriorData`: typed `theta`, `sample_stats`, `extras`,
-      `metadata`, `observed_data`. Index it by name or by draw; convert with `to_dataframe` /
-      `from_dataframe`; get the prior of a subset with `marginal_prior`; fingerprint it with
-      `content_hash`.
-    * Custom displays: `_display_equations` / `_display_config` on a measurement process, and
-      `_display_title` / `_display_math` / `_display_body` on any `ai.RichDisplay`.
+    * `PE(..., as_posterior=True)` returns a `PosteriorData`, which can be indexed by name or by
+      draw, converted to and from a DataFrame, and asked for the prior of a subset of columns
+      (`marginal_prior`).
+    * `_display_equations` and `_display_config` customise a measurement process's display; any
+      subclass of `ai.RichDisplay` gets a display from `_display_title`, `_display_math` and
+      `_display_body`.
 
-    So far, every analysis has been about **one** object: one coin, one lighthouse, one patient.
-    **Notebook 4** zooms out to *populations*: the distribution that coins, lighthouses and patients
-    are drawn from.
+    Every analysis so far has been about a single object: one coin, one lighthouse, one patient.
+    Notebook 4 turns to populations, the distributions that such objects are drawn from.
     """)
     return
 
@@ -533,7 +552,7 @@ def _():
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## ✏️ Your turn: the bathroom scale
+    ## Exercise: the bathroom scale
 
     The office buys a scale that weighs patients with a noise of 2 kg.
 
@@ -554,7 +573,7 @@ def _():
 
 @app.cell(hide_code=True)
 def _():
-    mo.accordion({"💡 Show a solution": mo.md(r"""
+    mo.accordion({"Show a solution": mo.md(r"""
     ```python
     @parameter_dataclass(name="Chart with scale", latex="d")
     class ChartWithScale:
@@ -597,7 +616,7 @@ def _():
     plot_people(ax, posterior.theta, color=style.PRIOR, label="BMI only")
     plot_people(ax, post.theta, color=style.POSTERIOR, label="BMI + scale")
     ax.legend()
-    # h = sqrt(w / BMI): fixing w picks one point on the BMI curve.
+    # h = sqrt(w / BMI), so knowing w picks out one point on the BMI curve.
     ```
     """)})
     return

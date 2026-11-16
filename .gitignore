@@ -19,3 +19,14 @@ notebooks/data/
 
 # OS
 .DS_Store
+
+# Jupyter Book build output, and the tutorials converted for it (scripts/export_tutorials.py)
+docs/_build/
+docs/examples/*.ipynb
+
+
+# Personal dev work folder
+personal_dev/*
+
+# Throwaway layout prototypes
+docs/_prototype/

@@ -11,6 +11,30 @@ from math import prod
 import numpy as np
 
 # ============================================================
+# Options
+# ============================================================
+
+_OPTIONS = {"expanded": False}
+
+
+def set_options(*, expanded: bool | None = None) -> None:
+    """Set how objects are displayed in notebooks.
+
+    expanded:
+        If True, the display of every object starts open, showing its contents,
+        instead of as a single line that has to be clicked. The documentation
+        uses this. Sections inside a display keep their own defaults.
+    """
+    if expanded is not None:
+        _OPTIONS["expanded"] = bool(expanded)
+
+
+def details_open() -> str:
+    """The attribute that opens an object's top-level <details>, if requested."""
+    return " open" if _OPTIONS["expanded"] else ""
+
+
+# ============================================================
 # Shared rendering utilities
 # ============================================================
 
@@ -273,7 +297,7 @@ class RichDisplay:
             header += inline_math(latex)
 
         return (
-            '<details style="font-family:inherit;line-height:1.5">'
+            '<details' + details_open() + ' style="font-family:inherit;line-height:1.5">'
 
             '<summary style="cursor:pointer;padding:0.25em 0">'
             '<span style="display:inline-flex;'

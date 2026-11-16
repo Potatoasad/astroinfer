@@ -19,7 +19,7 @@ dependencies = [
 marimo = ["marimo>=0.25.2"]
 # Convenience extras for the extension packages in this repository.
 tgmm = ["astroinfer-tgmm"]
-gwmockcat = ["astroinfer-gwmockcat"]
+gw = ["astroinfer-gw"]
 
 [build-system]
 requires = ["hatchling"]

@@ -35,21 +35,21 @@ with app.setup:
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    # 4 · The coin mint 🏭
+    # 4. The coin mint
 
-    So far every coin had *one* true bias $p$, and we inferred it. Now zoom out: a **mint** stamps
-    out thousands of coins, and imperfections in the press give each coin a slightly different bias.
-    The biases follow a **population distribution**
+    So far every coin had one true bias $p$, and we inferred it. Now consider a *mint* that stamps
+    out thousands of coins. Imperfections in the press give each coin a slightly different bias, and
+    the biases follow a *population distribution*
 
     $$
     p \sim \pi(p\mid\Lambda),
     $$
 
-    where $\Lambda$ (the *hyperparameters*) describes the mint: its typical bias, how sloppy it is,
-    how many of its machines are worn out.
+    where the *hyperparameters* $\Lambda$ describe the mint, for example its typical bias, how
+    sloppy it is, and how many of its machines are worn out.
 
-    This notebook is about *writing down* $\pi(\theta\mid\Lambda)$ with `astroinfer.generative`.
-    Notebook 5 then *infers* $\Lambda$ from flipped coins.
+    This notebook shows how to write down $\pi(\theta\mid\Lambda)$ with `astroinfer.generative`.
+    Notebook 5 then infers $\Lambda$ from flipped coins.
     """)
     return
 
@@ -57,8 +57,8 @@ def _():
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    **Recap from notebook 1.** Our parameters are a `Coin` with one field, `p`. We'll only need the
-    class here (the flips come back in notebook 5).
+    The parameters are the `Coin` class from notebook 1, with one field `p`. We only need the class
+    here; the flips come back in notebook 5.
     """)
     return
 
@@ -72,23 +72,20 @@ class Coin:
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## Why a special population language?
+    ## Population models
 
-    You could write a population with numpyro or scipy. `astroinfer.generative` exists because
-    hierarchical inference (notebook 5) needs **two** things from a population model:
+    You could write a population with numpyro or scipy, but hierarchical inference (notebook 5)
+    needs two things from a population model. It has to draw samples
+    $\theta\sim\pi(\theta\mid\Lambda)$ that are a smooth, differentiable function of $\Lambda$, so
+    that the sampler can follow gradients, and it has to evaluate $\log\pi(\theta\mid\Lambda)$ at
+    given values. `astroinfer.generative` does both. Each variable is drawn by pushing a fixed
+    uniform number $u\in(0,1)$ through the inverse CDF, $\theta = F^{-1}(u;\Lambda)$, so if $u$ is
+    held fixed and $\Lambda$ changes a little, $\theta$ changes a little too.
 
-    1. **sample** $\theta\sim\pi(\theta\mid\Lambda)$ such that the draws are a *smooth, differentiable
-       function of $\Lambda$* (so the sampler can follow gradients), and
-    2. **score** $\log\pi(\theta\mid\Lambda)$ at given values.
+    ## Leaves and models
 
-    It does both from the same ingredients: each variable is drawn by pushing a fixed uniform
-    number $u\in(0,1)$ through the inverse CDF, $\theta = F^{-1}(u;\Lambda)$. Keep $u$ fixed, nudge
-    $\Lambda$, and $\theta$ moves smoothly.
-
-    ## Step 1 · A leaf and a model
-
-    A **leaf** is a 1-D distribution for one named variable. Its parameters can be numbers *or*
-    names of hyperparameters (strings), which are looked up in $\Lambda$ at call time:
+    A *leaf* is a one-dimensional distribution for one named variable. Its parameters can be numbers
+    or the names of hyperparameters, given as strings and looked up in $\Lambda$ at call time:
     """)
     return
 
@@ -110,9 +107,9 @@ def _():
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    `.sample(Lambda, key=, shape=)` returns a plain `{variable: array}` dict, which is exactly what
-    `Coin.from_dict` accepts. `.log_prob(values, Lambda)` scores values; on a grid it gives the
-    density curve:
+    `.sample(Lambda, key=, shape=)` returns a plain `{variable: array}` dict, which `Coin.from_dict`
+    accepts. `.log_prob(values, Lambda)` evaluates the log density, and on a grid of $p$ it gives
+    the density curve:
     """)
     return
 
@@ -134,20 +131,20 @@ def _(Lambda, coins, mint):
 
 @app.cell(hide_code=True)
 def _():
-    mo.callout(mo.md(r"""
-    **🧱 The built-in leaves.** `Uniform(var, a, b)`, `TruncatedNormal(var, mu, sigma, a, b)` and
-    `Beta(var, alpha, beta)`. Every distribution parameter is a **parameter spec**, one of:
+    mo.md(r"""
+    The built-in leaves are `Uniform(var, a, b)`, `TruncatedNormal(var, mu, sigma, a, b)` and
+    `Beta(var, alpha, beta)`. Each distribution parameter can be given in one of three ways:
 
-    | spec | example | meaning |
+    | parameter | example | meaning |
     |---|---|---|
     | a number | `sigma=0.02` | fixed |
     | a string | `mu="mu"` | the hyperparameter `Lambda["mu"]` |
-    | `conditional(fn, on=)` | see below | computed from variables drawn *earlier* |
+    | `conditional(fn, on=)` | see below | computed from variables drawn earlier |
 
-    `Uniform` and `TruncatedNormal` have a closed-form quantile, so drawing is one formula. `Beta`
-    does not, so astroinfer inverts its CDF numerically (bisection, still differentiable). That
-    works, but it is noticeably slower:
-    """), kind="info")
+    `Uniform` and `TruncatedNormal` have a closed-form quantile, so a draw is one formula. `Beta`
+    does not, so astroinfer inverts its CDF numerically by bisection, which is still differentiable
+    but noticeably slower:
+    """)
     return
 
 
@@ -171,7 +168,8 @@ def _():
     | `TruncatedNormal` (closed-form quantile) | {_tn:.2f} ms |
     | `Beta` (bisection) | {_beta:.2f} ms ({_beta / _tn:.0f}x slower) |
 
-    Prefer leaves with a closed-form quantile on hot paths, like inside a population likelihood.
+    Prefer leaves with a closed-form quantile in code that runs many times, such as a population
+    likelihood.
     """)
     return
 
@@ -179,19 +177,19 @@ def _():
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## Step 2 · Two machines: `mixture`
+    ## Mixtures
 
-    Our mint has two presses. The **fair press** stamps near-perfect coins, $p\approx 0.5$. The
-    **worn press** stamps biased ones. A fraction $f_\mathrm{fair}$ of all coins come from the fair
-    press:
+    Suppose the mint has two presses. The fair press stamps near-perfect coins with $p\approx 0.5$,
+    and the worn press stamps biased ones. A fraction $f_\mathrm{fair}$ of all coins come from the
+    fair press:
 
     $$
     \pi(p\mid\Lambda) = f_\mathrm{fair}\,\mathcal{TN}(p;\,0.5,\,0.02)
                       + (1-f_\mathrm{fair})\,\mathcal{TN}(p;\,\mu_\mathrm{worn},\,\sigma_\mathrm{worn}).
     $$
 
-    `mixture(models, weights)` takes the components (all describing the *same* variables) and the
-    names of $K-1$ weight hyperparameters; the last weight is one minus the rest.
+    `mixture(models, weights)` takes the components, which must all describe the same variables,
+    and the names of $K-1$ weight hyperparameters. The last weight is one minus the others.
     """)
     return
 
@@ -210,11 +208,11 @@ def _():
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## Common random numbers: turn the knobs 🎛️
+    ## Common random numbers
 
-    Move the sliders. The histogram is redrawn from the **same random key** every time, so the
-    coins don't jitter between settings: each coin slides smoothly as $\Lambda$ changes. The sampler
-    is `jax.jit`-compiled once; the sliders only change its inputs.
+    The histogram below is redrawn from the same random key each time you move a slider, so the
+    coins don't jump around between settings and each coin moves smoothly as $\Lambda$ changes. The
+    sampler is compiled with `jax.jit` once, and the sliders only change its inputs.
     """)
     return
 
@@ -252,10 +250,11 @@ def _(knobs, p_grid, stamp, two_press_mint):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    Under the hood, a draw is $\theta = F^{-1}(u;\Lambda)$ with $u$ fixed. Below, 20 coins (20 fixed
-    $u$'s) are re-stamped as $\mu_\mathrm{worn}$ sweeps from 0.3 to 0.9. **Left:** the same `key`
-    every time, i.e. common random numbers; every coin traces a smooth curve. **Right:** a fresh key
-    per setting; pure noise. Only the left one has a useful derivative.
+    Each draw is $\theta = F^{-1}(u;\Lambda)$ with $u$ fixed. Below, 20 coins (20 fixed values of
+    $u$) are stamped again as $\mu_\mathrm{worn}$ goes from 0.3 to 0.9. The left panel uses the same
+    `key` every time (common random numbers), and every coin traces a smooth curve. The right panel
+    uses a new key for each setting, and the values scatter randomly. Only the left one has a useful
+    derivative with respect to $\mu_\mathrm{worn}$.
     """)
     return
 
@@ -270,8 +269,8 @@ def _(Lambda_two, two_press_mint):
         _mus, jax.random.split(jax.random.key(4), len(_mus)))
 
     _fig, _axes = plt.subplots(1, 2, figsize=(9.6, 3.2), sharey=True, layout="constrained")
-    for _ax, _vals, _title in [(_axes[0], _same, "same key: smooth in $\\Lambda$"),
-                               (_axes[1], _fresh, "fresh key: jumps around")]:
+    for _ax, _vals, _title in [(_axes[0], _same, "same key at every setting"),
+                               (_axes[1], _fresh, "new key at every setting")]:
         _ax.plot(_mus, _vals, color=style.PRIOR, linewidth=0.9, alpha=0.6)
         _ax.set(xlabel=r"$\mu_\mathrm{worn}$", title=_title)
     _axes[0].set_ylabel("$p$ of each coin")
@@ -282,10 +281,11 @@ def _(Lambda_two, two_press_mint):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    For full control, pass the uniforms yourself with `seeds={variable: u_array}` (this is what
-    notebook 5's likelihood does). Because draws are differentiable, you can take `jax.grad` of
-    *anything computed from samples* with respect to $\Lambda$. Here: how the average bias of the
-    mint's output responds to each knob, checked against finite differences.
+    You can also pass the uniforms yourself with `seeds={variable: u_array}`, which is what the
+    likelihood in notebook 5 does. Because the draws are differentiable, you can take `jax.grad`
+    with respect to $\Lambda$ of any quantity computed from samples. The table shows the gradient of
+    the mint's average bias with respect to each hyperparameter, next to a finite-difference
+    estimate:
     """)
     return
 
@@ -302,39 +302,39 @@ def _(Lambda_two, two_press_mint):
     _eps = 1e-5
     _fd = {k: (mean_bias({**_L, k: _L[k] + _eps}) - mean_bias({**_L, k: _L[k] - _eps})) / (2 * _eps)
            for k in _L}
-    mo.md("| knob | `jax.grad` | finite difference |\n|---|---|---|\n" + "\n".join(
+    mo.md("| hyperparameter | `jax.grad` | finite difference |\n|---|---|---|\n" + "\n".join(
         f"| `{k}` | {float(_grad[k]):+.5f} | {float(_fd[k]):+.5f} |" for k in _L))
     return
 
 
 @app.cell(hide_code=True)
 def _():
-    mo.callout(mo.md(r"""
-    The mixture has no closed-form quantile, so its draws come from bisection. The gradient is
-    still exact: astroinfer differentiates the *root* of $F(\theta;\Lambda)=u$ with the implicit
-    function theorem, $\partial\theta/\partial\Lambda = -(\partial F/\partial\Lambda)/\pi(\theta)$,
-    rather than the bisection loop.
-    """), kind="neutral")
+    mo.md(r"""
+    The mixture has no closed-form quantile, so its draws come from bisection. The gradient is still
+    exact, because astroinfer does not differentiate through the bisection loop. It differentiates
+    the root of $F(\theta;\Lambda)=u$ with the implicit function theorem,
+    $\partial\theta/\partial\Lambda = -(\partial F/\partial\Lambda)/\pi(\theta)$.
+    """)
     return
 
 
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## Step 3 · Several variables: `product`, `conditional`, and `order`
+    ## Several variables
 
-    Real coins have more than one property. Suppose the mint also varies the **thickness** $t$ of
-    each coin, $t\sim U(1.5, 2.5)$ mm, and thicker coins are more biased:
+    Coins have more than one property. Suppose the mint also varies the thickness $t$ of each coin,
+    $t\sim U(1.5, 2.5)$ mm, and thicker coins are more biased:
 
     $$
     p\mid t \sim \mathcal{TN}\big(0.5 + k\,(t - 2),\ \sigma\big)_{[0,1]}.
     $$
 
-    * `product([...])` groups variables that are listed separately.
-    * `conditional(fn, on=)` makes a distribution parameter a function `fn(x, L)` of earlier draws
-      `x` and hyperparameters `L`. `on=` names what `fn` reads.
-    * `order=` says which variable is drawn first. A conditional may only read variables that come
-      *before* it.
+    Three pieces of `astroinfer.generative` are needed for this. `product([...])` combines leaves
+    for different variables. `conditional(fn, on=)` makes a distribution parameter a function
+    `fn(x, L)` of earlier draws `x` and hyperparameters `L`, where `on=` names the variables `fn`
+    reads. `order=` sets the order in which variables are drawn, and a conditional may only read
+    variables that come before it.
     """)
     return
 
@@ -357,7 +357,7 @@ def _():
     _fig, _ax = plt.subplots(figsize=(6.4, 3.0))
     _ax.scatter(thick_coins["thickness"], thick_coins["p"], s=4, alpha=0.4, color=style.PRIOR,
                 linewidths=0, rasterized=True)
-    _ax.set(xlabel="thickness $t$ [mm]", ylabel="$p$", title="Thicker coins are more biased")
+    _ax.set(xlabel="thickness $t$ [mm]", ylabel="$p$", title="Bias against thickness")
     _fig
     return Lambda_thick, p_given_thickness, thick_mint
 
@@ -365,8 +365,8 @@ def _():
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    `GenerativeModel` checks the order when you build it, so a mistake fails *immediately* with a
-    clear message, not deep inside a sampler:
+    `GenerativeModel` checks the order when you build it, so a wrong order raises an error straight
+    away instead of somewhere inside a sampler. Here is what happens if we draw `p` first:
     """)
     return
 
@@ -385,11 +385,11 @@ def _(thick_mint):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ### Conditioning on values you *don't* draw: `external=`
+    ### External variables
 
-    Sometimes a variable comes from somewhere else (it was measured, or another model drew it).
-    Declare it `external` and supply it at call time with `conditioned_on=`. Here we stamp one coin
-    at each of three thicknesses we choose:
+    Sometimes a variable comes from somewhere else, because it was measured or another model drew
+    it. Declare it in `external=` and pass its values at call time with `conditioned_on=`. Here we
+    stamp one coin at each of three thicknesses that we choose:
     """)
     return
 
@@ -408,11 +408,11 @@ def _(Lambda_thick, p_given_thickness):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## Step 4 · Write your own leaf
+    ## Writing your own leaf
 
-    When the built-in leaves aren't enough, subclass `Distribution`. Here is a **power law**,
-    $\pi(x)\propto x^{\gamma}$ on $[x_\mathrm{lo}, x_\mathrm{hi}]$. Notebook 6 uses this exact class
-    for stars spread **uniformly in volume** around us, $\pi(r)\propto r^2$.
+    If none of the built-in leaves fit, subclass `Distribution`. As an example we write a power
+    law, $\pi(x)\propto x^{\gamma}$ on $[x_\mathrm{lo}, x_\mathrm{hi}]$. Notebook 6 uses this class
+    for stars spread uniformly in volume around us, $\pi(r)\propto r^2$.
     """)
     return
 
@@ -420,10 +420,10 @@ def _():
 @app.cell(hide_code=True)
 def _():
     mo.callout(mo.md(r"""
-    **🧩 What you implement in a `Distribution`**
+    **What you implement in a `Distribution`**
 
-    Every method gets `var` (which variable), `x` (the dict of variables drawn so far) and `L` (the
-    hyperparameters), so the same leaf can be conditional.
+    Every method receives `var` (which variable), `x` (the dict of variables drawn so far) and `L`
+    (the hyperparameters), so any leaf can be conditional.
 
     | method | returns |
     |---|---|
@@ -431,10 +431,10 @@ def _():
     | `cond_pdf(var, val, x, L)` | the density at `val` (0 outside the support) |
     | `cond_cdf(var, val, x, L)` | the CDF at `val` |
     | `bounds(var)` | the support `(a, b)` (used by bisection and `log_prob`) |
-    | `cond_ppf(var, u, x, L)` | *optional:* closed-form quantile. Return `None` (the default) to fall back to bisection |
-    | `deps(var)` | *optional:* names of earlier variables you read (for order checking) |
+    | `cond_ppf(var, u, x, L)` | optional: the closed-form quantile. Return `None` (the default) to fall back to bisection |
+    | `deps(var)` | optional: the names of earlier variables you read, used to check the order |
 
-    Write them with `jax.numpy` so they are differentiable.
+    Write the methods with `jax.numpy` so that they are differentiable.
     """), kind="info")
     return
 
@@ -466,8 +466,9 @@ class PowerLaw(Distribution):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    To see what `cond_ppf` buys, make a copy that *forgets* it. Both give the same draws from the
-    same seeds (bisection finds the same quantile), but the closed form skips 40 bisection steps:
+    To see what `cond_ppf` gains you, make a copy without it. Both versions give the same draws from
+    the same seeds, because bisection finds the same quantile, but the closed form saves 40
+    bisection steps per draw:
     """)
     return
 
@@ -493,25 +494,25 @@ def _():
     _ax.legend(loc="upper left")
     mo.vstack([_fig, mo.md(
         f"Largest difference between closed-form and bisection draws: "
-        f"**{float(jnp.abs(_fast - _slow).max()):.1e}** kpc.")])
+        f"{float(jnp.abs(_fast - _slow).max()):.1e} kpc.")])
     return
 
 
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## Recap
+    ## Summary
 
     * A population model $\pi(\theta\mid\Lambda)$ is a `GenerativeModel(root, order, external=)`.
-    * Build the root from **leaves** (`Uniform`, `TruncatedNormal`, `Beta`, or your own
-      `Distribution`), combined with `product` (different variables) and `mixture` (the same
-      variables, weights as hyperparameters).
-    * Distribution parameters are **specs**: a number, a hyperparameter name, or
-      `conditional(fn, on=)` of earlier draws. `order` is checked up front.
-    * `.sample(Lambda, key=, shape=)` / `.sample(Lambda, seeds=)` and `.log_prob(values, Lambda)`.
-      With a fixed key or seeds, draws are smooth and differentiable in $\Lambda$.
+      The root is built from leaves (`Uniform`, `TruncatedNormal`, `Beta`, or your own
+      `Distribution`) combined with `product` for different variables and `mixture` for the same
+      variables.
+    * A distribution parameter is a number, a hyperparameter name, or `conditional(fn, on=)` of
+      earlier draws. The order is checked when the model is built.
+    * `.sample(Lambda, key=, shape=)`, `.sample(Lambda, seeds=)` and `.log_prob(values, Lambda)`.
+      With a fixed key or fixed seeds, the draws are differentiable in $\Lambda$.
 
-    In **notebook 5** we flip coins from the mint and infer $\Lambda$.
+    In notebook 5 we flip coins from the mint and infer $\Lambda$.
     """)
     return
 
@@ -519,14 +520,15 @@ def _():
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## ✏️ Your turn: the third press
+    ## Exercise: the third press
 
-    The mint buys a third press that is badly broken: it stamps coins with $p\sim U(0.9, 1.0)$.
+    The mint buys a third press that is badly broken and stamps coins with $p\sim U(0.9, 1.0)$.
 
     1. Build a three-component mixture (fair, worn, broken). How many weight names do you need?
     2. Sample 20,000 coins at $f_\mathrm{fair}=0.5$, $f_\mathrm{worn}=0.3$ and plot them.
-    3. Use `jax.grad` to find how the *fraction of coins with $p>0.85$* responds to $f_\mathrm{fair}$.
-       (Hint: a hard cut has zero gradient. Use a smooth step such as `jax.nn.sigmoid((p - 0.85) / 0.01)`.)
+    3. Use `jax.grad` to find how the fraction of coins with $p>0.85$ changes with $f_\mathrm{fair}$.
+       (A hard cut has zero gradient, so use a smooth step such as
+       `jax.nn.sigmoid((p - 0.85) / 0.01)`.)
     """)
     return
 
@@ -539,7 +541,7 @@ def _():
 
 @app.cell(hide_code=True)
 def _():
-    mo.accordion({"💡 Show a solution": mo.md(r"""
+    mo.accordion({"Show a solution": mo.md(r"""
     ```python
     broken_press = Uniform("p", 0.9, 1.0)
     three_press_mint = GenerativeModel(
@@ -558,7 +560,7 @@ def _():
         return jax.nn.sigmoid((p - 0.85) / 0.01).mean()
 
     jax.grad(frac_very_biased)({k: jnp.asarray(v) for k, v in L3.items()})["f_fair"]
-    # negative: more fair coins means fewer very biased ones (about -0.2 here)
+    # About -0.2: more fair coins means fewer very biased ones.
     ```
     """)})
     return

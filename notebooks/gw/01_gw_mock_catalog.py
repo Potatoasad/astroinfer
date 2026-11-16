@@ -20,12 +20,8 @@ with app.setup:
     from astroinfer import Catalog, RawSamples
     from astroinfer.detection import ThresholdTrigger
 
-    from astroinfer_gwmockcat import (
-        GWMockCatMeasurement,
-        ToyOptimalSNR,
-        isotropic_projection_factor,
-        projection_factor_model,
-    )
+    from astroinfer_gw.gwmockcat import GWMockCatMeasurement, ToyOptimalSNR
+    from astroinfer_gw.physics import isotropic_projection_factor, projection_factor_model
 
     ph.restore_plot_defaults()
     ph.set_plot_defaults(latex_font_size=16, usetex=True)
@@ -51,17 +47,18 @@ with app.setup:
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    # 1. A mock GW catalog, end to end
+    # 1. A mock gravitational-wave catalog
 
-    This notebook makes the catalog that notebook 02 fits with TGMMs:
+    This notebook builds the mock catalog that notebook 2 fits with TGMMs. It goes through these
+    steps in order:
 
-    1. a **measurement process** $K(d\mid\theta)$ (GWMockCat-style, with effective spins),
-    2. a **detection trigger** $P(\mathrm{det}\mid d)$,
-    3. **truths** $\theta_i \sim p(\theta\mid\Lambda_\mathrm{true})$ drawn from a gravpop population,
-    4. noisy data $d_i \sim K(d\mid\theta_i)$, keeping the detected ones,
-    5. **parameter estimation** for each detected event, collected in a `Catalog` and saved.
-
-    Everything is done in a few explicit lines; there is no simulator object.
+    1. a GWMockCat-style measurement process $\mathcal{L}(d\mid\theta)$ with effective spins;
+    2. a detection trigger $P(\mathrm{det}\mid d)$;
+    3. true source parameters $\theta_i \sim p(\theta\mid\Lambda_\mathrm{true})$, drawn from a gravpop
+       population;
+    4. simulated data $d_i \sim \mathcal{L}(d\mid\theta_i)$, of which only the detected events are kept;
+    5. parameter estimation for each detected event, with the posteriors collected in a `Catalog`
+       and saved.
     """)
     return
 
@@ -71,8 +68,9 @@ def _():
     mo.md(r"""
     ## The measurement process and the trigger
 
-    Click the objects below to expand them: the measurement shows its noise model, the trigger its
-    detection rule.
+    The measurement process uses a toy model of the optimal SNR. An event is detected when its
+    observed SNR is above 4. Expanding the displays below shows the measurement's noise model and
+    the trigger's detection rule.
     """)
     return
 
@@ -92,9 +90,10 @@ def _():
     mo.md(r"""
     ## The true population
 
-    A smoothed power law in $m_1$ with $q\mid m_1 \propto q^\beta$, truncated Gaussians in the spin
-    magnitudes and tilts, the isotropic projection factor $\Theta\sim\mathrm{Beta}(2,4)$, and
-    $p(z)\propto \frac{dV_c}{dz}(1+z)^{\lambda-1}$, all as gravpop models.
+    The true population is a product of gravpop models: a smoothed power law in $m_1$ with
+    $p(q\mid m_1)\propto q^\beta$, truncated Gaussians for the spin magnitudes and tilt cosines, the
+    isotropic projection factor $\Theta\sim\mathrm{Beta}(2,4)$, and a redshift distribution
+    $p(z)\propto \frac{dV_c}{dz}(1+z)^{\lambda-1}$.
     """)
     return
 
@@ -128,11 +127,11 @@ def _():
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## Simulate: truths $\to$ data $\to$ detection
+    ## Simulating detections
 
-    Three lines. `measurement.sample` takes a DataFrame of truths (or a `GWParams`) and returns a
-    batched `GWMockCatData`; the trigger turns data into detections. A batched `Parameters` object
-    can be indexed by a boolean mask, so `data[detected]` is the detected events' data.
+    `measurement.sample` takes a DataFrame of true parameters, or a `GWParams` object, and returns
+    the simulated data as a batched `GWMockCatData`. `trigger.detect` returns a boolean mask of the
+    detected events, which can index both the table of true parameters and the data:
     """)
     return
 
@@ -149,7 +148,7 @@ def _(measurement, trigger, true_hyper, true_population):
     detected_truths = truths[detected].reset_index(drop=True)
     detected_data = data[detected]
 
-    mo.md(f"**{detected.sum()}** of {len(truths):,} simulated sources are detected "
+    mo.md(f"{detected.sum()} of {len(truths):,} simulated sources are detected "
           f"(observed SNR > {SNR_THRESHOLD:g}).")
     return detected_data, detected_truths, truths
 
@@ -177,14 +176,15 @@ def _():
     mo.md(r"""
     ## Parameter estimation
 
-    PE priors are uniform in $m_1, q, z$ and the spins, and isotropic in $\Theta$.
-    `measurement.PE(d, priors, as_posterior=True)` runs NUTS on $K(d\mid\theta)$ and returns a
-    `PosteriorData`: the draws of $\theta$ (typed `GWParams`), the derived parameters, the PE
-    prior as `prior` and each parameter's factor as `log_prior[...]`. Those factors are what let
-    the catalog (and the TGMM fits) use the prior of just the columns they export.
+    The PE priors are uniform in $m_1$, $q$, $z$ and the spins, and isotropic in $\Theta$.
+    `measurement.PE(d, priors, as_posterior=True)` runs NUTS on $\mathcal{L}(d\mid\theta)$ and returns a
+    `PosteriorData`. It holds the draws of $\theta$ as a `GWParams`, the derived parameters, the PE
+    prior density as `prior`, and the log prior of each parameter as `log_prior[...]`. The catalog
+    and the TGMM fits use these per-parameter factors to compute the prior of only the columns they
+    export.
 
-    PE takes a few seconds per event. The catalog is saved to `data/gw_catalog`; when it already
-    exists it is loaded instead, unless you tick the box.
+    PE takes a few seconds per event. The catalog is saved to `notebooks/data/gw_catalog`. If that
+    folder already exists, the catalog is loaded from it instead, unless you tick the box.
     """)
     return
 
@@ -196,7 +196,7 @@ def _():
         redshift=dist.Uniform(0.0, 1.5), projection_factor=isotropic_projection_factor(),
         chi_1=dist.Uniform(0.0, 1.0), chi_2=dist.Uniform(0.0, 1.0),
         cos_tilt_1=dist.Uniform(-1.0, 1.0), cos_tilt_2=dist.Uniform(-1.0, 1.0))
-    force_pe = mo.ui.checkbox(label="re-run PE (overwrites data/gw_catalog)")
+    force_pe = mo.ui.checkbox(label="re-run PE (overwrites notebooks/data/gw_catalog)")
     force_pe
     return force_pe, pe_priors
 
@@ -223,7 +223,8 @@ def _():
     mo.md(r"""
     ## One event's posterior
 
-    The truth is the injected $\theta$ stored in the event's metadata.
+    The plot marks the event's true parameters, which were stored in its metadata when it was added
+    to the catalog.
     """)
     return
 
@@ -254,8 +255,9 @@ def _():
     mo.md(r"""
     ## The raw data product
 
-    The raw representation resamples every event to the same number of draws and exports the
-    chosen columns plus the PE prior **of those columns alone**, event-major: `(E, N)`.
+    `catalog.dataproduct()` resamples every event to the same number of draws. It returns the
+    exported columns and the PE prior density of those columns only, each with shape
+    `(events, draws)`:
     """)
     return
 
@@ -270,12 +272,13 @@ def _(catalog):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## Injections (for the selection function)
+    ## Injections
 
-    Injections are drawn from a broad population $g$ (flatter in $m_1$ and $q$, uniform spins,
-    a flatter redshift evolution), scattered once each, and put through the same trigger.
-    `trigger.injections` records the data, the detection statistic and whether each was detected;
-    $g$ itself is carried as `prior`.
+    The selection function is estimated from injections. They are drawn from a broad population
+    $g$, flatter than the true population in $m_1$, $q$ and redshift and uniform in the spins, then
+    measured once each and passed through the same trigger. `trigger.injections` returns a table
+    with the measured data, the detection statistic and whether each injection was detected. The
+    density of $g$ is in the `prior` column.
     """)
     return
 
@@ -298,7 +301,7 @@ def _(measurement, redshift_model, trigger):
         {k: jnp.asarray(injection_draws[k].to_numpy()) for k in injection_population.var_names},
         injection_hyper))
     injections = trigger.injections(measurement, injection_draws, _rng)
-    mo.vstack([mo.md(f"**{injections.detected.sum():,}** of {len(injections):,} injections detected "
+    mo.vstack([mo.md(f"{injections.detected.sum():,} of {len(injections):,} injections are detected "
                      f"({injections.detected.mean():.2%})."),
                injections[injections.detected].head()])
     return

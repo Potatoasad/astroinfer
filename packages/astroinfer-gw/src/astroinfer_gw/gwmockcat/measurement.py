@@ -6,17 +6,17 @@ from astroinfer import MeasurementProcess, parameter, parameter_dataclass
 from jax.scipy.stats import norm, truncnorm
 from numpyro.distributions import constraints
 
-from .physics import (
+from ..physics import (
     CHI_EFF_BOUNDS,
     CHI_P_BOUNDS,
     ETA_BOUNDS,
     PROJECTION_BOUNDS,
     RedshiftToLuminosityDistance,
-    ToyOptimalSNR,
     chirp_mass_from_mass_ratio,
     effective_spins,
     symmetric_mass_ratio,
 )
+from .snr import ToyOptimalSNR
 
 
 @parameter_dataclass(name="GW source", latex=r"\theta")
@@ -56,7 +56,7 @@ def _truncnorm_logpdf(x, loc, scale, bounds):
 
 
 class GWMockCatMeasurement(MeasurementProcess):
-    """K(d | theta) of a GWMockCat-style catalog with effective spins.
+    """L(d | theta) of a GWMockCat-style catalog with effective spins.
 
     The data are made from the detector-frame Mc_det and d_L. With
     rho = snr_model(theta) * Theta and w = 1 / max(snr, snr_floor):

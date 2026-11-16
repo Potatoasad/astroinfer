@@ -24,6 +24,8 @@ jobs:
       - uses: astral-sh/setup-uv@v6
       - run: uv sync --locked
       - run: scripts/run_tutorials.sh
+      - name: Run the example on the docs landing page
+        run: uv run python docs/snippets/coin_flip.py
 
   julia:
     name: TGMM tests (Julia)

@@ -1,0 +1,171 @@
+/* astroinfer brand colours (see assets/README.md). Navy is for text, blue for accents, amber
+   only for the small point in the logo and the parameter node on the landing page. */
+:root {
+  --ai-navy: #17243D;
+  --ai-blue: #418FC5;
+  --ai-amber: #E0A348;
+  --ai-pale: #E8EDF3;
+}
+
+/* Headings in navy on light pages; the theme's own colour in dark mode. */
+html:not(.dark) .article h1,
+html:not(.dark) .article h2,
+html:not(.dark) .article h3,
+html:not(.dark) h1.myst-fm-block-title {
+  color: var(--ai-navy);
+}
+
+/* Buttons: navy with white text (the brand blue is too light for small text on white). */
+a.button {
+  background: var(--ai-navy) !important;
+  border-color: var(--ai-navy) !important;
+  color: #fff !important;
+}
+a.button:hover {
+  background: var(--ai-blue) !important;
+  border-color: var(--ai-blue) !important;
+}
+html.dark a.button {
+  background: var(--ai-pale) !important;
+  border-color: var(--ai-pale) !important;
+  color: var(--ai-navy) !important;
+}
+html.dark a.button:hover {
+  background: #ffffff !important;
+  border-color: #ffffff !important;
+}
+
+/* astroinfer objects display as collapsible <details>. The theme hides the disclosure
+   marker of every <summary>, so draw one for summaries inside notebook outputs only. */
+.jp-OutputArea details > summary {
+  cursor: pointer;
+}
+.jp-OutputArea details > summary::before {
+  content: "\25B8";            /* right-pointing triangle */
+  display: inline-block;
+  width: 1em;
+  color: #6b7280;
+}
+.jp-OutputArea details[open] > summary::before {
+  content: "\25BE";            /* down-pointing triangle */
+}
+
+/* Landing page: the diagram theta -> L(d|theta) -> d runs down a narrow rail on the left, and
+   each node sits next to its description and code. */
+.rail {
+  display: grid;
+  grid-template-columns: 5rem minmax(0, 1fr);
+  column-gap: 1rem;
+  margin: 1.5rem 0;
+}
+.rail-gut {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.rail-body {
+  padding-bottom: 1.25rem;
+}
+.rail-body > p {
+  margin: 0.25rem 0 0.5rem;
+}
+.rail-label {
+  font-weight: 600;
+}
+.rail-label p {
+  margin: 0;
+}
+.rail-stem {
+  position: relative;
+  flex: 1;
+  min-height: 1rem;
+  width: 0;
+  border-left: 1.5px solid #8592a6;
+}
+.rail-arrow::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: -6.75px;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 10px solid #8592a6;
+}
+.dag-node, .dag-process {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid currentColor;
+  line-height: 1.2;
+  flex: none;
+}
+.dag-node {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  font-size: 1.2rem;
+}
+.dag-node.dag-theta {
+  border-color: var(--ai-amber);
+}
+.dag-process {
+  white-space: nowrap;
+  padding: 0.3rem 0.45rem;
+  font-size: 0.8rem;
+  border-color: var(--ai-blue);
+  background: var(--ai-pale);
+}
+html.dark .dag-process {
+  background: transparent;
+}
+.dag-node p, .dag-process p {
+  margin: 0;
+}
+
+/* Code on the landing page sits on a tinted panel with a border, so it stands apart from the
+   page. */
+.landing-code {
+  margin-bottom: 1rem;
+}
+.rail .myst-code, .landing-code .myst-code {
+  margin: 0;
+  border: 1px solid #d5dde7;
+  border-radius: 6px;
+  background: #f6f8fb;
+  box-shadow: none;
+}
+html.dark .rail .myst-code, html.dark .landing-code .myst-code {
+  border-color: #33415a;
+  background: #111a2b;
+}
+
+/* The landing page includes its code from docs/snippets/; don't show that file name. */
+.myst-code > div:has(> .myst-code-filename-title) {
+  display: none;
+}
+
+/* Landing page: the logo replaces the page title, in its light or dark version. */
+.logo-dark {
+  display: none !important;
+}
+html.dark .logo-light {
+  display: none !important;
+}
+html.dark .logo-dark {
+  display: block !important;
+}
+
+/* The brand icon before "astroinfer" at the top of the sidebar. The icon is inlined (with the
+   two heavier contours of the favicon) because the theme has no option for it. */
+.myst-toc > a.myst-toc-item:first-child {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.myst-toc > a.myst-toc-item:first-child::before {
+  content: "";
+  flex: none;
+  width: 1.5rem;
+  height: 1.5rem;
+  background: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 128 128%22%3E%3Cg fill=%22none%22 stroke=%22%23418FC5%22 stroke-width=%227%22%3E%3Cellipse cx=%2264%22 cy=%2264%22 rx=%2256%22 ry=%2229%22 transform=%22rotate%28-38 64 64%29%22/%3E%3Cellipse cx=%2264%22 cy=%2264%22 rx=%2234%22 ry=%2217%22 transform=%22rotate%28-38 64 64%29%22 opacity=%22.7%22/%3E%3C/g%3E%3Ccircle cx=%2264%22 cy=%2264%22 r=%2210%22 fill=%22%23E0A348%22/%3E%3C/svg%3E") no-repeat center / contain;
+}
