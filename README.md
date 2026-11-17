@@ -136,14 +136,16 @@ term when only some objects are detected. The posteriors of single objects can b
 
 ## Installation
 
-astroinfer is not on PyPI yet. Install it from git:
+astroinfer is not on PyPI yet. Install it from git, together with the gravitational-wave models:
 
 ```bash
-uv add "astroinfer @ git+https://github.com/Potatoasad/astroinfer#subdirectory=packages/astroinfer"
+uv add "astroinfer @ git+https://github.com/Potatoasad/astroinfer#subdirectory=packages/astroinfer" \
+       "astroinfer-gw @ git+https://github.com/Potatoasad/astroinfer#subdirectory=packages/astroinfer-gw"
 ```
 
-Some dependencies are only available from git and have to be listed in your project's
-`[tool.uv.sources]`. See [Installation](https://potatoasad.github.io/astroinfer/installation/).
+This also installs gravpop from git. See
+[Installation](https://potatoasad.github.io/astroinfer/installation/) for pip and for the
+optional `astroinfer-tgmm` extension.
 
 ## What is in this repository
 

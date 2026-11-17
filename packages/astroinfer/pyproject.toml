@@ -5,7 +5,7 @@ description = "Typed forward models and hierarchical inference in JAX"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "gravpop",
+    "gravpop @ git+https://git.ligo.org/asad.hussain/gravpop@simplify-composite",
     "h5py>=3.10",
     "jax>=0.12.0.1",
     "numpy>=2.5.4",
@@ -20,6 +20,10 @@ marimo = ["marimo>=0.25.2"]
 # Convenience extras for the extension packages in this repository.
 tgmm = ["astroinfer-tgmm"]
 gw = ["astroinfer-gw"]
+
+# gravpop is not on PyPI, so it is a direct git reference; hatchling rejects these unless allowed.
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [build-system]
 requires = ["hatchling"]

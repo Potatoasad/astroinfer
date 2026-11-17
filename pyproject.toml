@@ -30,8 +30,7 @@ astroinfer = { workspace = true }
 astroinfer-tgmm = { workspace = true }
 astroinfer-gw = { workspace = true }
 # Dependencies installed from git. These sources apply only inside this workspace;
-# see README "Installing" for what that means for users.
-gravpop = { git = "https://git.ligo.org/asad.hussain/gravpop", rev = "simplify-composite" }
+# see docs/installation.md for what that means for users.
 truncatedgaussianmixtures = { git = "https://github.com/Potatoasad/truncatedgaussianmixtures", rev = "jax-backend" }
 plot-helper = { git = "https://github.com/Potatoasad/plot_helper" }
 

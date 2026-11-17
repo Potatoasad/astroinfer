@@ -170,6 +170,7 @@ def test_population_inference_returns_posterior(data, exact):
     assert [f for f in post.theta.to_dict()] == ["mu", "sigma"]
     assert post.sample_stats["N_eff_min"].shape == (2, 400)
     assert post.metadata["inference"] == "population"
+    assert post._display_math().startswith(r"p(\Lambda\mid")
     assert abs(float(post.theta.mu.mean()) - exact["mu"]) < 0.08
     assert abs(float(post.theta.sigma.mean()) - exact["sigma"]) < 0.08
 
@@ -180,6 +181,7 @@ def test_population_inference_with_hyperparameter_type(data):
         **{**RUN, "num_warmup": 100, "num_samples": 100},
     )
     assert isinstance(post.theta, Hyper)
+    assert post._display_math().startswith(r"p(\Lambda\mid")
 
 
 # ============================================================
@@ -192,6 +194,7 @@ def test_joint_matches_exact(joint_posterior, exact):
     assert post.local.batch_shape == (2, 400, E)
     assert post.local_dims == ("chain", "draw", "observation")
     assert post.metadata["inference"] == "joint population"
+    assert post._display_math().startswith(r"p(\Lambda,")
     assert abs(float(post.theta.mu.mean()) - exact["mu"]) < 0.08
     assert abs(float(post.theta.sigma.mean()) - exact["sigma"]) < 0.08
 

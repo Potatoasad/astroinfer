@@ -7,9 +7,13 @@ requires-python = ">=3.12"
 dependencies = [
     "astroinfer",
     "astropy",
-    "gravpop",
+    "gravpop @ git+https://git.ligo.org/asad.hussain/gravpop@simplify-composite",
     "numpyro",
 ]
+
+# gravpop is not on PyPI, so it is a direct git reference; hatchling rejects these unless allowed.
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [build-system]
 requires = ["hatchling"]

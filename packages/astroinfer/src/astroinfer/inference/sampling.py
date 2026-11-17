@@ -91,7 +91,7 @@ def _sampler_arrays(sampler):
     return sampler.get_samples(), sampler.get_sample_stats(), ("draw",)
 
 
-def _type_from_arrays(type_name, values, n_batch):
+def _type_from_arrays(type_name, values, n_batch, *, latex=None):
     """A parameter dataclass with one field per array in ``values``.
 
     Axes after the first ``n_batch`` become core axes named
@@ -104,7 +104,7 @@ def _type_from_arrays(type_name, values, n_batch):
         namespace[name] = parameter(
             index=tuple(f"{name}_dim_{i}" for i in range(extra))
         )
-    return parameter_dataclass(type(type_name, (), namespace))
+    return parameter_dataclass(type(type_name, (), namespace), latex=latex)
 
 
 def _hyperparameter_posterior(
@@ -128,7 +128,10 @@ def _hyperparameter_posterior(
     if cls is None:
         names = [k for k in others if k.isidentifier()]
         cls = _type_from_arrays(
-            "Hyperparameters", {k: others[k] for k in names}, len(sample_dims)
+            "Hyperparameters",
+            {k: others[k] for k in names},
+            len(sample_dims),
+            latex=r"\Lambda",
         )
     names = [f.name for f in fields(cls)]
     missing = [k for k in names if k not in others]
@@ -215,7 +218,10 @@ def parameter_estimation(
     parameter_type = measurement.parameter_type
     if parameter_type is None:
         parameter_type = _type_from_arrays(
-            "Parameters", {k: sites[k] for k in names}, len(sample_dims)
+            "Parameters",
+            {k: sites[k] for k in names},
+            len(sample_dims),
+            latex=r"\theta",
         )
     theta = parameter_type.from_dict({k: jnp.asarray(sites[k]) for k in names})
 

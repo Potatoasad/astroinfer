@@ -738,6 +738,11 @@ class PosteriorData[P: Parameters](RichDisplay):
         )
 
         inference = self.metadata.get("inference")
+        if inference in ("population", "joint population") and (
+            theta == self.parameter_type.__name__
+        ):
+            # A hyperparameter type declared without latex= is shown as Lambda.
+            theta = r"\Lambda"
         if inference == "population":
             return rf"p({theta}\mid \{{{data}_i\}})"
         if inference == "joint population":
