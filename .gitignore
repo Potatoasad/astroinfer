@@ -23,6 +23,7 @@ notebooks/data/
 # Jupyter Book build output, and the tutorials converted for it (scripts/export_tutorials.py)
 docs/_build/
 docs/examples/*.ipynb
+docs/examples/images/
 
 
 # Personal dev work folder

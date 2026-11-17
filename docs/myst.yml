@@ -24,13 +24,14 @@ project:
       children:
         - file: examples/01_coin_flips.ipynb
         - file: examples/02_lighthouse.ipynb
-        - file: examples/03_doctors_office.ipynb
-        - file: examples/04_coin_mint.ipynb
-        - file: examples/05_auditing_the_mint.ipynb
-        - file: examples/06_flux_limited_survey.ipynb
-        - file: examples/07_sharper_telescopes.ipynb
-        - file: examples/08_star_catalog.ipynb
-        - file: examples/09_your_own_representation.ipynb
+        - file: examples/03_transit.ipynb
+        - file: examples/04_doctors_office.ipynb
+        - file: examples/05_coin_mint.ipynb
+        - file: examples/06_auditing_the_mint.ipynb
+        - file: examples/07_flux_limited_survey.ipynb
+        - file: examples/08_sharper_telescopes.ipynb
+        - file: examples/09_star_catalog.ipynb
+        - file: examples/10_your_own_representation.ipynb
     - title: User guide
       children:
         - file: user-guide/terminology.md

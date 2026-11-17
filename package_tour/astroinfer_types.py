@@ -1048,7 +1048,7 @@ def _():
     `camera.population_inference(data, pop_model, priors, N=...)` builds the
     `PopulationLikelihood` and calls `run_sampler` in one step. To change the likelihood, for
     example to correct for detection, subclass `PopulationLikelihood` and override
-    `logpdf(Lambda)`; tutorial 6 does this. Tutorial 7 introduces `Proposal`, which draws the
+    `logpdf(Lambda)`; tutorial 7 does this. Tutorial 8 introduces `Proposal`, which draws the
     parameters of each source from a distribution close to its likelihood instead of from the
     population.
 

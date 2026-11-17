@@ -159,12 +159,16 @@ class Catalog(RichDisplay):
             raise TypeError("posterior must be a PosteriorData instance")
         if eventname in self._fits[RAW] and not overwrite:
             raise ValueError(f"Event {eventname!r} already exists; pass overwrite=True")
-        if len(posterior.batch_shape) != 1:
-            raise ValueError(
-                f"Event {eventname!r} must have one draw axis, "
-                f"got batch_shape={posterior.batch_shape}. "
-                "Flatten chain/draw axes before adding it."
+        if posterior.local is not None:
+            raise TypeError(
+                f"Event {eventname!r}: a joint population posterior is not a "
+                "single-event posterior"
             )
+        if not posterior.batch_shape:
+            raise ValueError(f"Event {eventname!r} has no draw axis")
+        # A catalog keeps exchangeable draws; the chain of each draw stays
+        # available as sample_stats["chain"].
+        posterior = posterior.stack_samples()
         if posterior.batch_shape[0] == 0:
             raise ValueError(f"Event {eventname!r} has no posterior draws")
         if metadata is not None:

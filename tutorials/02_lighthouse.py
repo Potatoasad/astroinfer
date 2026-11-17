@@ -35,40 +35,21 @@ def _():
     distance $\beta$ out to sea. It rotates and emits short flashes at uniformly random angles. You
     can't see the lighthouse, but a row of detectors along the shore records where each flash hits
     the coast. Where is the lighthouse?
+    """)
+    return
 
-    <div style="text-align:center;margin:0.5em 0 1em">
-    <svg viewBox="0 0 640 330" width="640" style="max-width:100%;height:auto" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Geometry of the lighthouse problem">
-    <defs><marker id="lh-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#52514e"/></marker></defs>
-    <rect x="0" y="0" width="640" height="330" rx="6" fill="#fcfcfb"/>
-    <rect x="20" y="20" width="600" height="220" fill="#2a78d6" fill-opacity="0.06"/>
-    <text x="36" y="44" font-family="sans-serif" font-size="13" fill="#8a8984">sea</text>
-    <line x1="20" y1="240" x2="620" y2="240" stroke="#0b0b0b" stroke-width="1.5"/>
-    <g fill="#8a8984"><rect x="45" y="237" width="6" height="6"/><rect x="77" y="237" width="6" height="6"/><rect x="109" y="237" width="6" height="6"/><rect x="141" y="237" width="6" height="6"/><rect x="173" y="237" width="6" height="6"/><rect x="205" y="237" width="6" height="6"/><rect x="237" y="237" width="6" height="6"/><rect x="269" y="237" width="6" height="6"/><rect x="333" y="237" width="6" height="6"/><rect x="365" y="237" width="6" height="6"/><rect x="397" y="237" width="6" height="6"/><rect x="429" y="237" width="6" height="6"/><rect x="461" y="237" width="6" height="6"/><rect x="493" y="237" width="6" height="6"/><rect x="525" y="237" width="6" height="6"/><rect x="557" y="237" width="6" height="6"/><rect x="589" y="237" width="6" height="6"/></g>
-    <text x="604" y="264" text-anchor="end" font-family="sans-serif" font-size="13" fill="#8a8984">detectors along the shore</text>
-    <line x1="300" y1="110" x2="300" y2="240" stroke="#52514e" stroke-width="1.2" stroke-dasharray="5 4"/>
-    <line x1="300" y1="70" x2="419" y2="240" stroke="#eda100" stroke-width="2.2"/>
-    <circle cx="419" cy="240" r="5.5" fill="#1baf7a"/>
-    <path d="M 300 116 A 46 46 0 0 0 326.4 107.7" fill="none" stroke="#52514e" stroke-width="1.2"/>
-    <text x="317" y="136" font-family="KaTeX_Math, 'Times New Roman', serif" font-style="italic" font-size="20" fill="#0b0b0b">φ</text>
-    <ellipse cx="300" cy="106" rx="18" ry="4.5" fill="#52514e"/>
-    <polygon points="295,77 305,77 309,104 291,104" fill="#0b0b0b"/>
-    <rect x="294" y="63" width="12" height="14" fill="#0b0b0b"/>
-    <polygon points="290,64 310,64 300,54" fill="#0b0b0b"/>
-    <circle cx="300" cy="70" r="4.5" fill="#eda100"/>
-    <text x="318" y="70" font-family="KaTeX_Main, 'Times New Roman', serif" font-size="18" fill="#0b0b0b">(<tspan font-family="KaTeX_Math, 'Times New Roman', serif" font-style="italic">α</tspan>, <tspan font-family="KaTeX_Math, 'Times New Roman', serif" font-style="italic">β</tspan>)</text>
-    <line x1="256" y1="70" x2="286" y2="70" stroke="#8a8984" stroke-width="1"/>
-    <line x1="262" y1="72" x2="262" y2="238" stroke="#52514e" stroke-width="1.2" marker-start="url(#lh-arrow)" marker-end="url(#lh-arrow)"/>
-    <text x="248" y="162" text-anchor="end" font-family="KaTeX_Math, 'Times New Roman', serif" font-style="italic" font-size="20" fill="#0b0b0b">β</text>
-    <line x1="120" y1="244" x2="120" y2="304" stroke="#8a8984" stroke-width="1"/>
-    <line x1="300" y1="244" x2="300" y2="304" stroke="#8a8984" stroke-width="1"/>
-    <line x1="122" y1="296" x2="298" y2="296" stroke="#52514e" stroke-width="1.2" marker-start="url(#lh-arrow)" marker-end="url(#lh-arrow)"/>
-    <text x="210" y="288" text-anchor="middle" font-family="KaTeX_Math, 'Times New Roman', serif" font-style="italic" font-size="20" fill="#0b0b0b">α</text>
-    <text x="120" y="322" text-anchor="middle" font-family="KaTeX_Main, 'Times New Roman', serif" font-size="16" fill="#0b0b0b">0</text>
-    <path d="M 414 260 L 419 255.5 L 424 260" fill="none" stroke="#0b0b0b" stroke-width="1.3"/>
-    <text x="414" y="272" font-family="KaTeX_Math, 'Times New Roman', serif" font-style="italic" font-size="20" fill="#0b0b0b">x<tspan font-size="14" dy="5">k</tspan></text>
-    </svg>
-    </div>
 
+@app.cell(hide_code=True)
+def _():
+    mo.image(src=mo.notebook_dir() / "images" / "02_lighthouse.svg",
+             alt="A lighthouse off a straight coast, flashing towards detectors on the shore",
+             width=640)
+    return
+
+
+@app.cell(hide_code=True)
+def _():
+    mo.md(r"""
     A flash at angle $\phi\sim U(-\tfrac\pi2,\tfrac\pi2)$ lands at $\hat x = \alpha + \beta\tan\phi$,
     so every recorded position is a draw from a *Cauchy distribution*,
 
@@ -556,8 +537,8 @@ def _():
     * `support=` together with `to_unconstrained` and `from_unconstrained` keeps an optimiser inside
       the allowed region.
 
-    Notebook 3 looks at `PosteriorData`, the typed object `.PE` can return instead of a DataFrame,
-    and at how to give your own objects a display like the ones above.
+    Notebook 3 fits the light curve of a star with a transiting planet. It gives the data class a
+    `plot` method and checks the fit against posterior predictive light curves.
     """)
     return
 

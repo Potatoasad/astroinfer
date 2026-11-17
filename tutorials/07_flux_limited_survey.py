@@ -43,14 +43,14 @@ with app.setup:
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    # 6. A flux-limited survey
+    # 7. A flux-limited survey
 
     A telescope surveys a shell of stars between 0.5 and 2 kpc. For each star it measures a flux
     and a parallax, but it only catalogs stars whose measured flux is above a limit, so faint stars
     far away are never included.
 
     We want the population of stellar luminosities, $p(\log_{10}L\mid\Lambda)$. Since the catalog
-    is biased towards bright stars, feeding it into the hierarchical analysis of notebook 5 as if it
+    is biased towards bright stars, feeding it into the hierarchical analysis of notebook 6 as if it
     were a fair sample gives the wrong answer. This is *Malmquist bias*, and it is corrected with a
     *selection term*.
 
@@ -67,6 +67,14 @@ def _():
 
 @app.cell(hide_code=True)
 def _():
+    mo.image(src=mo.notebook_dir() / "images" / "07_flux_limited_survey.svg",
+             alt="A telescope that detects only the stars bright enough to pass a flux limit",
+             width=640)
+    return
+
+
+@app.cell(hide_code=True)
+def _():
     mo.md(r"""
     ## The model
 
@@ -75,7 +83,7 @@ def _():
     the measured parallax in mas. The flux falls off as $1/r^2$, so
     $\log_{10}F = \log_{10}L - 2\log_{10}r$, and the parallax is $1/r$. The population is
     $\log_{10}L\sim\mathcal{TN}(\mu_L,\sigma_L)$, with stars uniform in volume,
-    $p(r)\propto r^2$, using the `PowerLaw` leaf from notebook 4:
+    $p(r)\propto r^2$, using the `PowerLaw` leaf from notebook 5:
     """)
     return
 
@@ -312,7 +320,7 @@ def _():
 
     ## The naive analysis
 
-    First we ignore selection and repeat the analysis of notebook 5, with hyperpriors on
+    First we ignore selection and repeat the analysis of notebook 6, with hyperpriors on
     $\Lambda=(\mu_L,\sigma_L)$ and `telescope.population_inference`. As before, we start by
     checking the Monte Carlo integrals at the true $\Lambda$:
     """)
@@ -334,7 +342,7 @@ def _(Lambda_true, data, pop_model, telescope):
 def _(data, hyper_priors, pop_model, telescope):
     naive = telescope.population_inference(
         data, pop_model, hyper_priors, N=N_DRAWS, seed=3, num_warmup=300, num_samples=1000,
-    ).samples
+    ).to_dataframe()
     naive[["mu_L", "sigma_L"]].describe().loc[["mean", "std"]]
     return (naive,)
 
@@ -347,7 +355,7 @@ def _():
 
     ## The selection term
 
-    The likelihood of notebook 5 multiplies together the probability of each star's data. Our
+    The likelihood of notebook 6 multiplies together the probability of each star's data. Our
     catalog only contains detected stars, though, so each factor should be the probability of the
     data given that the star was detected. That means dividing each factor by the probability of
     detection:
@@ -532,7 +540,7 @@ def _():
     * Extra likelihood terms go in a subclass of `PopulationLikelihood` that overrides `logpdf`,
       run with `ai.run_sampler`. Check both the per-event and the selection $N_\mathrm{eff}$.
 
-    In notebook 7 the telescope gets much sharper, and the population-draw integrals stop working
+    In notebook 8 the telescope gets much sharper, and the population-draw integrals stop working
     until we add a `Proposal`.
     """)
     return

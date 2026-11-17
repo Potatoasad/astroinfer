@@ -10,7 +10,7 @@ does not render markdown outputs). Interactive elements show their label and def
 
 Objects made from static text also keep their markdown in `.text`. The export script uses it to
 turn hidden cells that only show text into markdown cells, with `mo.callout` and `mo.accordion`
-becoming MyST admonitions and dropdowns.
+becoming MyST admonitions and dropdowns, and `mo.image` a MyST image.
 """
 from __future__ import annotations
 
@@ -126,6 +126,33 @@ class _Accordion(_Markdown):
     def _repr_html_(self):
         return "".join(f"<details><summary>{html.escape(label)}</summary>{_to_html(body)}</details>"
                        for label, body in self.items.items())
+
+
+class _Image(_Markdown):
+    """An image file next to the notebook, shown inline and exported as a MyST image."""
+
+    def __init__(self, src, alt: str = "", width: int | None = None):
+        self.path = Path(src).resolve()
+        self.alt, self.width = alt, width
+        relative = self.path.relative_to(_NOTEBOOK_DIR).as_posix()
+        options = [f":alt: {alt}"] if alt else []
+        if width:
+            options.append(f":width: {width}px")
+        options.append(":align: center")
+        self.text = "\n".join(["```{image} " + relative, *options, "```"])
+
+    def _repr_html_(self):
+        import base64
+        import mimetypes
+
+        mime = mimetypes.guess_type(self.path.name)[0] or "image/png"
+        data = base64.b64encode(self.path.read_bytes()).decode()
+        width = f' width="{self.width}"' if self.width else ""
+        return f'<img src="data:{mime};base64,{data}" alt="{html.escape(self.alt)}"{width}>'
+
+
+def image(src, alt: str = "", width: int | None = None, **kwargs) -> _Image:
+    return _Image(src, alt, width)
 
 
 def callout(value, kind: str = "neutral") -> _Callout:

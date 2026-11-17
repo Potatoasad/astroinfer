@@ -137,7 +137,7 @@ posterior.head()
 ```
 
 The result is a pandas DataFrame with one row per draw, holding the parameters, the log
-likelihood and the prior density. For a uniform prior the exact posterior is
+likelihood, the prior density and the sampler's statistics for that draw. For a uniform prior the exact posterior is
 $\mathrm{Beta}(1 + n_\mathrm{heads},\, 1 + n_\mathrm{tails})$, which the NUTS draws match:
 
 ```{code-cell} python
@@ -161,5 +161,5 @@ batch of `Coin` objects together with the observed data. It is described in
 The [quickstart](quickstart.md) uses a model with two parameters to go on from here to
 populations of objects and catalogs of posteriors, and [Installation](installation.md) shows how
 to install astroinfer and its extensions. The [examples](examples.md) work
-through nine problems in more depth, starting with this coin, and
+through ten problems in more depth, starting with this coin, and
 [Why astroinfer?](why-astroinfer.md) describes what the library takes care of.

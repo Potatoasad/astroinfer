@@ -31,6 +31,8 @@ import jax.numpy as jnp
 import numpyro.distributions as dist
 
 from astroinfer import MeasurementProcess, parameter, parameter_dataclass
+
+jax.config.update("jax_enable_x64", True)
 ```
 
 ### Parameters $\theta$
@@ -38,20 +40,20 @@ from astroinfer import MeasurementProcess, parameter, parameter_dataclass
 A coin has a probability $p$ of landing heads.
 
 ```python
-@parameter_dataclass
+@parameter_dataclass(name="Coin")
 class Coin:
-    p: float = parameter()
+    p: float = parameter(name="Probability of heads")
 ```
 
 ### Data $d$
 
 The data are the 50 flips, `True` for heads. `index` makes `heads` an array along an axis named
-`flip`, written $i$.
+`flip`.
 
 ```python
-@parameter_dataclass
+@parameter_dataclass(name="Flips")
 class Flips:
-    heads: bool = parameter(index=("flip",), index_latex=("i",))
+    heads: bool = parameter(name="Landed heads", index=("flip",))
 ```
 
 ### Measurement process $\mathcal{L}(d\mid\theta)$
@@ -65,39 +67,55 @@ probability $p$.
 class FlipCoin(MeasurementProcess):
     n_flips: int = 50
 
-    parameter_type = Coin
-    data_type = Flips
+    display_name = "Flip a coin"
+    parameter_type = Coin  # theta is a Coin
+    data_type = Flips      # d is a Flips
 
-    def sample_single(self, theta, key):
+    def sample_single(self, theta: Coin, key: jax.Array) -> Flips:
         h = jax.random.bernoulli(key, theta.p, (self.n_flips,))
         return Flips(heads=h)
 
-    def logpdf_single(self, d, theta):
+    def logpdf_single(self, d: Flips, theta: Coin) -> jax.Array:
         p = theta.p
         return jnp.where(d.heads, jnp.log(p), jnp.log1p(-p)).sum()
 ```
 
 ### Simulation and inference
 
-The measurement process now runs the experiment 1000 times, evaluates the likelihood of every
-outcome, and samples the posterior of $p$ given the first one:
+We ask the measurement process to run the 50-flip experiment 1000 times for a coin with
+$p = 0.7$, and get back a batch of data:
 
 ```python
 experiment = FlipCoin(n_flips=50)
 coin = Coin(p=0.7)
 
-d = experiment.sample(coin, N=1000, key=0)   # 1000 experiments
-d.batch_shape                                # (1000,)
-experiment.logpdf(d, coin)                   # log L(d | theta), shape (1000,)
+d = experiment.sample(coin, N=1000, key=0)
+```
 
+`d` is one `Flips` object that holds all 1000 experiments. Its `heads` field is a 1000 by 50
+array of `True` and `False`, with one row per experiment and one column per flip.
+
+The likelihood works on the whole batch, and returns one value of $\log\mathcal{L}(d\mid\theta)$
+for each of the 1000 experiments:
+
+```python
+log_like = experiment.logpdf(d, coin)   # shape (1000,)
+```
+
+`sample_single` and `logpdf_single` were written for one experiment. astroinfer applies them to
+batches of any shape with `jax.vmap` and manages the random keys.
+
+Parameter estimation samples the posterior of $p$ with NUTS. Here we give it the first
+experiment, `d[0]`, and a uniform prior on $p$:
+
+```python
 priors = {"p": dist.Uniform(0, 1)}
-posterior = experiment.PE(d[0], priors)      # NUTS on the first experiment
+posterior = experiment.PE(d[0], priors, seed=0)
 posterior["p"].mean()
 ```
 
-`sample_single` and `logpdf_single` were written for one coin and one experiment. astroinfer
-applies them to batches of any shape with `jax.vmap`, manages the random keys, and passes the
-likelihood to NUTS.
+The [landing page of the documentation](https://potatoasad.github.io/astroinfer/) shows the
+outputs, along with a planetary transit, a population of stars, and a template for your own model.
 
 ## Beyond one object
 
@@ -110,7 +128,7 @@ term when only some objects are detected. The posteriors of single objects can b
 ## Where to go next
 
 - [Getting started](https://potatoasad.github.io/astroinfer/getting-started/): the coin flip example step by step, with outputs.
-- [Examples](https://potatoasad.github.io/astroinfer/examples/): nine worked problems, from a coin flip to selection effects and custom
+- [Examples](https://potatoasad.github.io/astroinfer/examples/): ten worked problems, from a coin flip to selection effects and custom
   catalog representations.
 - [User guide](https://potatoasad.github.io/astroinfer/terminology/): parameter types, measurement processes,
   population models, population inference and catalogs, one page each.
@@ -135,7 +153,7 @@ Some dependencies are only available from git and have to be listed in your proj
 | [`packages/astroinfer-tgmm`](packages/astroinfer-tgmm) | truncated Gaussian mixture (TGMM) catalog representations; uses Julia |
 | [`packages/astroinfer-gw`](packages/astroinfer-gw) | gravitational-wave models, including a GWMockCat-style measurement process for mock catalogs |
 | [`docs/`](docs) | the documentation |
-| [`tutorials/`](tutorials) | nine marimo notebooks, from a coin flip to selection effects and custom representations |
+| [`tutorials/`](tutorials) | ten marimo notebooks, from a coin flip to selection effects and custom representations |
 | [`package_tour/`](package_tour) | a notebook that goes through every type and its methods |
 | [`notebooks/gw/`](notebooks/gw) | gravitational-wave examples: a mock catalog, TGMM fits, and population inference with a proposal |
 

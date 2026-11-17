@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 320" width="640" style="max-width:100%;height:auto" role="img" aria-label="A telescope surveys a shell of stars between 0.5 and 2 kiloparsecs; bright and nearby stars are detected, faint distant stars fall below the flux limit and are missed">
+<rect x="0" y="0" width="640" height="320" rx="10" fill="#E8EDF3"/>
+<path d="M 198.5 111.3 A 130 130 0 0 1 198.5 208.7 L 448.9 309.8 A 400 400 0 0 0 448.9 10.2 Z" fill="#ffffff" stroke="#8592a6" stroke-width="2" stroke-dasharray="6 5"/>
+<circle cx="235.6" cy="132.2" r="16" fill="none" stroke="#418FC5" stroke-width="2"/>
+<polygon points="235.6,123.2 237.9,128.9 244.1,129.4 239.4,133.5 240.9,139.5 235.6,136.3 230.3,139.5 231.7,133.5 227.0,129.4 233.2,128.9" fill="#E0A348" stroke="#17243D" stroke-width="1.5" stroke-linejoin="round"/>
+<circle cx="253.4" cy="200.5" r="19" fill="none" stroke="#418FC5" stroke-width="2"/>
+<polygon points="253.4,188.5 256.6,196.1 264.8,196.8 258.5,202.2 260.4,210.2 253.4,205.9 246.3,210.2 248.3,202.2 242.0,196.8 250.2,196.1" fill="#E0A348" stroke="#17243D" stroke-width="1.5" stroke-linejoin="round"/>
+<circle cx="283.6" cy="97.1" r="15" fill="none" stroke="#418FC5" stroke-width="2"/>
+<polygon points="283.6,89.1 285.7,94.2 291.2,94.7 287.0,98.3 288.3,103.6 283.6,100.7 278.9,103.6 280.2,98.3 276.0,94.7 281.5,94.2" fill="#E0A348" stroke="#17243D" stroke-width="1.5" stroke-linejoin="round"/>
+<circle cx="322.7" cy="172.8" r="20" fill="none" stroke="#418FC5" stroke-width="2"/>
+<polygon points="322.7,159.8 326.1,168.1 335.0,168.8 328.2,174.6 330.3,183.3 322.7,178.7 315.0,183.3 317.1,174.6 310.3,168.8 319.2,168.1" fill="#E0A348" stroke="#17243D" stroke-width="1.5" stroke-linejoin="round"/>
+<polygon points="348.5,225.5 350.3,229.9 355.1,230.3 351.5,233.4 352.6,238.1 348.5,235.6 344.3,238.1 345.5,233.4 341.8,230.3 346.6,229.9" fill="#E8EDF3" stroke="#8592a6" stroke-width="1.5" stroke-linejoin="round"/>
+<circle cx="378.4" cy="107.0" r="18" fill="none" stroke="#418FC5" stroke-width="2"/>
+<polygon points="378.4,96.0 381.3,103.0 388.8,103.6 383.1,108.6 384.8,115.9 378.4,112.0 371.9,115.9 373.7,108.6 367.9,103.6 375.5,103.0" fill="#E0A348" stroke="#17243D" stroke-width="1.5" stroke-linejoin="round"/>
+<polygon points="406.2,188.5 407.8,192.3 411.9,192.6 408.8,195.3 409.7,199.3 406.2,197.2 402.7,199.3 403.6,195.3 400.5,192.6 404.6,192.3" fill="#E8EDF3" stroke="#8592a6" stroke-width="1.5" stroke-linejoin="round"/>
+<polygon points="424.1,53.8 425.9,58.2 430.7,58.6 427.1,61.7 428.2,66.4 424.1,63.9 419.9,66.4 421.1,61.7 417.4,58.6 422.2,58.2" fill="#E8EDF3" stroke="#8592a6" stroke-width="1.5" stroke-linejoin="round"/>
+<polygon points="428.9,251.6 431.2,257.3 437.4,257.8 432.7,261.9 434.2,267.9 428.9,264.7 423.6,267.9 425.0,261.9 420.3,257.8 426.5,257.3" fill="#E8EDF3" stroke="#8592a6" stroke-width="1.5" stroke-linejoin="round"/>
+<circle cx="452.5" cy="140.4" r="20" fill="none" stroke="#418FC5" stroke-width="2"/>
+<polygon points="452.5,127.4 455.9,135.6 464.8,136.4 458.0,142.2 460.1,150.9 452.5,146.2 444.8,150.9 446.9,142.2 440.1,136.4 449.0,135.6" fill="#E0A348" stroke="#17243D" stroke-width="1.5" stroke-linejoin="round"/>
+<polygon points="297.9,147.3 299.2,150.5 302.6,150.8 300.0,153.0 300.8,156.4 297.9,154.6 294.9,156.4 295.7,153.0 293.1,150.8 296.5,150.5" fill="#E8EDF3" stroke="#8592a6" stroke-width="1.5" stroke-linejoin="round"/>
+
+<!-- telescope -->
+<g stroke="#17243D" stroke-width="2" stroke-linejoin="round">
+  <path d="M 44 172 L 32 214 M 44 172 L 56 214 M 44 172 L 44 214" fill="none"/>
+  <polygon points="22,153 68,148 68,172 22,167" fill="#418FC5"/>
+  <rect x="66" y="143" width="10" height="34" rx="2" fill="#ffffff"/>
+  <rect x="12" y="154" width="12" height="12" rx="2" fill="#ffffff"/>
+</g>
+<text x="44" y="234" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="13" fill="#17243D">telescope</text>
+<g font-family="Inter, system-ui, sans-serif" font-size="13" fill="#8592a6">
+  <text x="190" y="236" text-anchor="end">0.5 kpc</text>
+  <text x="480" y="240">2 kpc</text>
+</g>
+<!-- legend -->
+<g font-family="Inter, system-ui, sans-serif" font-size="13" fill="#17243D">
+  <circle cx="34" cy="30" r="10" fill="none" stroke="#418FC5" stroke-width="2"/>
+  <circle cx="34" cy="30" r="4" fill="#E0A348" stroke="#17243D" stroke-width="1.5"/>
+  <text x="52" y="35">detected</text>
+  <circle cx="34" cy="56" r="4" fill="#E8EDF3" stroke="#8592a6" stroke-width="1.5"/>
+  <text x="52" y="61" fill="#8592a6">missed</text>
+</g>
+<!-- flux inset -->
+<rect x="522" y="40" width="98" height="242" rx="8" fill="#ffffff"/>
+<text x="571" y="64" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="13" fill="#17243D">measured flux</text>
+<rect x="532" y="101.0" width="8" height="135.0" fill="#418FC5" fill-opacity="1"/>
+<rect x="544" y="123.5" width="8" height="112.5" fill="#418FC5" fill-opacity="1"/>
+<rect x="556" y="183.5" width="8" height="52.5" fill="#8592a6" fill-opacity="0.5"/>
+<rect x="568" y="146.0" width="8" height="90.0" fill="#418FC5" fill-opacity="1"/>
+<rect x="580" y="206.0" width="8" height="30.0" fill="#8592a6" fill-opacity="0.5"/>
+<rect x="592" y="168.5" width="8" height="67.5" fill="#418FC5" fill-opacity="1"/>
+<rect x="604" y="194.0" width="8" height="42.0" fill="#8592a6" fill-opacity="0.5"/>
+<line x1="526" y1="236" x2="612" y2="236" stroke="#17243D" stroke-width="1.5"/>
+<line x1="524" y1="176.0" x2="614" y2="176.0" stroke="#17243D" stroke-width="2" stroke-dasharray="6 4"/>
+<line x1="524" y1="258" x2="544" y2="258" stroke="#17243D" stroke-width="2" stroke-dasharray="6 4"/>
+<text x="550" y="263" font-family="Inter, system-ui, sans-serif" font-size="13" fill="#17243D">flux limit</text>
+</svg>

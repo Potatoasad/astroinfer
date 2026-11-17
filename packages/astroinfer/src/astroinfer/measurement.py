@@ -18,7 +18,11 @@ import numpy as np
 import pandas as pd
 
 from .display import RichDisplay, details_open, inline_math, kv_table, math_block
-from .inference.sampling import parameter_estimation, population_inference
+from .inference.sampling import (
+    joint_population_inference,
+    parameter_estimation,
+    population_inference,
+)
 from .parameters import coerce
 
 
@@ -42,6 +46,10 @@ class MeasurementProcess(RichDisplay):
         data_type
         sample_single(theta, key)
         logpdf_single(d, theta)
+
+    Optionally:
+        derived_parameters_single(theta)  -> dict of quantities computed
+                                             from one theta
 
     The base class handles batching, JAX keys, PE and display.
 
@@ -111,6 +119,15 @@ class MeasurementProcess(RichDisplay):
         self.key, sub = jax.random.split(self.key)
         return sub
 
+    def _resolve_key(self, key):
+        if key is None:
+            return self._next_key()
+        if isinstance(key, np.random.Generator):
+            return jax.random.key(int(key.integers(0, 2**31)))
+        if isinstance(key, (int, np.integer)):
+            return jax.random.key(int(key))
+        return key
+
     def sample(self, theta, key=None, *, N=None, **context):
         """
         Draw observations d ~ L(d | theta).
@@ -134,17 +151,7 @@ class MeasurementProcess(RichDisplay):
             N independent observations per theta.
             Output batch_shape = theta.batch_shape + (N,).
         """
-        # --------------------------------------------------
-        # RNG handling
-        # --------------------------------------------------
-        if key is None:
-            rng = self._next_key()
-        elif isinstance(key, np.random.Generator):
-            rng = jax.random.key(int(key.integers(0, 2**31)))
-        elif isinstance(key, (int, np.integer)):
-            rng = jax.random.key(int(key))
-        else:
-            rng = key
+        rng = self._resolve_key(key)
 
         # --------------------------------------------------
         # Parameter batching
@@ -232,8 +239,26 @@ class MeasurementProcess(RichDisplay):
     # Truths, injections, and derived parameters
     # ========================================================
 
-    def derived_parameters(self, theta):
+    def derived_parameters_single(self, theta):
+        """Quantities computed from one (unbatched) theta; none by default."""
         return {}
+
+    def derived_parameters(self, theta):
+        """
+        ``{name: array}`` of derived quantities, with theta's batch shape.
+
+        By default this vmaps ``derived_parameters_single`` over every batch
+        axis of theta. Override it instead when your code is already
+        batched; it receives a typed theta (``theta["x"]`` and ``theta.x``
+        both work).
+        """
+        if (
+            type(self).derived_parameters_single
+            is MeasurementProcess.derived_parameters_single
+        ):
+            return {}
+        theta = coerce(theta, self.parameter_type).broadcast()
+        return _vmapped(self.derived_parameters_single, theta.batch_shape)(theta)
 
     def check(self, df):
         out = pd.DataFrame(df).reset_index(drop=True).copy()
@@ -256,6 +281,7 @@ class MeasurementProcess(RichDisplay):
         }
 
     def with_derived(self, df):
+        """``df`` with the derived parameters added as columns."""
         out = pd.DataFrame(df).copy()
 
         theta = {
@@ -263,6 +289,8 @@ class MeasurementProcess(RichDisplay):
             for k in self.parameter_names
             if k in out.columns
         }
+        if self.parameter_type is not None and len(theta) == len(self.parameter_names):
+            theta = self.parameter_type.from_dict(theta)
 
         for k, v in self.derived_parameters(theta).items():
             if k not in out.columns:
@@ -292,6 +320,52 @@ class MeasurementProcess(RichDisplay):
         return population_inference(
             self, data, pop_model, pop_priors, **kwargs
         )
+
+    def joint_population_inference(self, data, pop_model, pop_priors, **kwargs):
+        """Sample Lambda and every observation's theta_i together.
+
+        See :func:`astroinfer.inference.joint_population_inference`.
+        """
+        return joint_population_inference(
+            self, data, pop_model, pop_priors, **kwargs
+        )
+
+    def posterior_predictive(self, posterior, *, draws=None, key=None):
+        """
+        Replicated data d_rep ~ L(d | theta), one per posterior draw.
+
+        Uses ``posterior.local`` (the theta_i of a joint population
+        posterior) when present, otherwise ``posterior.theta``; either must
+        be this measurement's ``parameter_type``.
+
+        draws:
+            None: use every draw; the result keeps the posterior's sample
+            axes (and the observation axis of ``local``).
+            int: pick this many draws at random, without replacement, after
+            stacking the sample axes; the result has batch shape
+            ``(draws,)`` (``(draws, E)`` with ``local``).
+        """
+        theta = posterior.local if posterior.local is not None else posterior.theta
+        if type(theta) is not self.parameter_type:
+            raise TypeError(
+                f"The posterior holds {type(theta).__name__}, but this "
+                f"measurement takes {getattr(self.parameter_type, '__name__', None)}."
+            )
+
+        rng = self._resolve_key(key)
+        if draws is not None:
+            pick, rng = jax.random.split(rng)
+            flat = posterior.stack_samples()
+            n = flat.batch_shape[0]
+            if not 0 < int(draws) <= n:
+                raise ValueError(f"draws must be between 1 and {n}")
+            idx = np.asarray(
+                jax.random.choice(pick, n, (int(draws),), replace=False)
+            )
+            flat = flat[idx]
+            theta = flat.local if flat.local is not None else flat.theta
+
+        return self.sample(theta, rng)
 
     # ========================================================
     # Rich notebook display
@@ -329,8 +403,13 @@ class MeasurementProcess(RichDisplay):
             (
                 ".PE",
                 rf"({data_tex},\,\pi_{{\mathrm{{PE}}}})"
-                r"\longrightarrow \mathrm{DataFrame}",
+                r"\longrightarrow \mathrm{DataFrame}\;|\;\mathrm{PosteriorData}",
                 "Infer posterior samples of the physical parameters",
+            ),
+            (
+                ".posterior_predictive",
+                rf"(\mathrm{{PosteriorData}})\longrightarrow {data_tex}",
+                "Replicate data from posterior draws",
             ),
         ]
 
@@ -465,6 +544,15 @@ class Proposal(MeasurementProcess):
             "A Proposal is not a measurement model; pass it as "
             "MeasurementProcess.population_inference(..., proposal=...)."
         )
+
+    def joint_population_inference(self, *args, **kwargs):
+        raise TypeError(
+            "A Proposal is not a measurement model; pass it as "
+            "MeasurementProcess.joint_population_inference(..., init=...)."
+        )
+
+    def posterior_predictive(self, *args, **kwargs):
+        raise TypeError("A Proposal is not a measurement model.")
 
     def _display_density(self, theta_tex, data_tex) -> str:
         # Here theta_tex is the event data d and data_tex is the drawn theta.

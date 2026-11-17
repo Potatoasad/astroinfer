@@ -1,7 +1,9 @@
 """Likelihood objects in the ``.logpdf(params)`` form ``gravpop.Sampler`` expects.
 
-    FixedDataLikelihood   L(d | theta) for fixed d, a function of theta  single-event PE
-    PopulationLikelihood  L(Lambda) = prod_i  E_{theta~p(.|Lambda)} L(d_i | theta)
+    FixedDataLikelihood        L(d | theta) for fixed d, a function of theta  single-event PE
+    PopulationLikelihood       L(Lambda) = prod_i  E_{theta~p(.|Lambda)} L(d_i | theta)
+    JointPopulationLikelihood  prod_i L(d_i | theta_i) p(theta_i | Lambda), a function
+                               of Lambda and every theta_i
 
 With a Proposal q_Lambda(theta | d), the per-event integral is estimated by
 importance sampling instead:
@@ -10,6 +12,8 @@ importance sampling instead:
                                 / q_Lambda(theta_ij | d_i),
     theta_ij ~ q_Lambda(. | d_i)
 """
+from dataclasses import fields
+
 import jax
 import jax.numpy as jnp
 
@@ -239,3 +243,37 @@ class PopulationLikelihood:
         }
 
         return jnp.sum(logp_events)
+
+
+class JointPopulationLikelihood:
+    """
+    log of prod_i L(d_i | theta_i) p(theta_i | Lambda), for joint sampling.
+
+    gravpop passes one dict holding the hyperparameters and, under names
+    ``prefix + field``, each field of the theta_i with batch shape (E,).
+    Together with the hyperprior this is the joint posterior
+    p(Lambda, {theta_i} | {d_i}).
+    """
+
+    def __init__(self, measurement, data, population, *, prefix="theta."):
+        self.measurement = measurement
+        self.population = population
+        self.data = coerce(data, measurement.data_type)
+        self.parameter_type = measurement.parameter_type
+        self.prefix = prefix
+        self.field_names = [f.name for f in fields(self.parameter_type)]
+
+    def split(self, x):
+        """``(Lambda dict, theta_i)`` from gravpop's variable dict."""
+        Lambda = {k: v for k, v in x.items() if not k.startswith(self.prefix)}
+        theta = self.parameter_type.from_dict(
+            {k: x[self.prefix + k] for k in self.field_names}
+        )
+        return Lambda, theta
+
+    def logpdf(self, x):
+        Lambda, theta = self.split(x)
+        return (
+            jnp.sum(self.measurement.logpdf(self.data, theta))
+            + jnp.sum(self.population.logpdf(theta, Lambda))
+        )

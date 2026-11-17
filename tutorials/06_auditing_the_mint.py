@@ -29,9 +29,9 @@ with app.setup:
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    # 5. Auditing the mint
+    # 6. Auditing the mint
 
-    A regulator buys $E = 40$ coins from the mint of notebook 4 and flips each one 30 times. What
+    A regulator buys $E = 40$ coins from the mint of notebook 5 and flips each one 30 times. What
     can the regulator learn from those flips about the mint itself, that is, about its
     hyperparameters $\Lambda$?
 
@@ -43,8 +43,16 @@ def _():
 
 @app.cell(hide_code=True)
 def _():
+    mo.image(src=mo.notebook_dir() / "images" / "06_auditing_the_mint.svg",
+             alt="A regulator flipping coins bought from the mint",
+             width=640)
+    return
+
+
+@app.cell(hide_code=True)
+def _():
     mo.md(r"""
-    The classes below are copied from notebooks 1 and 4. Each coin is a `Coin`, each experiment is
+    The classes below are copied from notebooks 1 and 5. Each coin is a `Coin`, each experiment is
     a `Flips` vector, and `FlipMany` is the measurement process. The mint stamps coins with
     $p\sim\mathcal{TN}(\mu,\sigma)_{[0,1]}$.
     """)
@@ -147,7 +155,7 @@ def _():
     $$
 
     The uniforms $u_{ij}$ are drawn once and then kept fixed (the common random numbers of
-    notebook 4), which makes $\hat Z_i(\Lambda)$ a smooth function of $\Lambda$ that NUTS can
+    notebook 5), which makes $\hat Z_i(\Lambda)$ a smooth function of $\Lambda$ that NUTS can
     differentiate.
     """)
     return
@@ -322,8 +330,8 @@ def _():
 
     To sample, give the hyperparameters priors (numpyro distributions again) and call
     `measurement.population_inference`, which builds the `PopulationLikelihood` and runs NUTS. It
-    returns the gravpop sampler, whose `.samples` is a DataFrame of $\Lambda$ draws along with the
-    diagnostics recorded at every draw:
+    returns a `PosteriorData` whose `theta` holds the $\Lambda$ draws. `to_dataframe()` gives them
+    as a table, along with the diagnostics recorded at every draw:
     """)
     return
 
@@ -332,10 +340,11 @@ def _():
 def _(data, flipper, mint):
     hyper_priors = dict(mu=dist.Uniform(0.0, 1.0), sigma=dist.Uniform(0.01, 0.5))
 
-    sampler = flipper.population_inference(data, mint, hyper_priors, N=1000, seed=0,
-                                           num_warmup=300, num_samples=1500)
-    hyperposterior = sampler.samples
-    hyperposterior.describe().T[["mean", "std", "min", "max"]].round(3)
+    posterior = flipper.population_inference(data, mint, hyper_priors, N=1000, seed=0,
+                                             num_warmup=300, num_samples=1500)
+    hyperposterior = posterior.to_dataframe()
+    _columns = ["mu", "sigma", "log_likelihood", "N_eff_min", "N_eff_mean", "N_eff_min_fraction"]
+    hyperposterior[_columns].describe().T[["mean", "std", "min", "max"]].round(3)
     return hyper_priors, hyperposterior
 
 
@@ -388,7 +397,7 @@ def _():
 
     Always look at the recorded diagnostics. If the smallest per-coin $N_\mathrm{eff}$ along the
     chain gets close to 1, increase $N$, or better, draw from a distribution closer to each coin's
-    likelihood (notebook 7):
+    likelihood (notebook 8):
     """)
     return
 
@@ -417,7 +426,7 @@ def _():
 
     `population_inference` has two more options that come up later. `conditioned_on={...}` passes
     fixed values to a population with `external` variables, and `likelihood_cls=` replaces the
-    likelihood with your own subclass of `PopulationLikelihood`. Notebook 6 needs a subclass for a
+    likelihood with your own subclass of `PopulationLikelihood`. Notebook 7 needs a subclass for a
     survey that only detects bright stars.
     """)
     return
@@ -428,7 +437,7 @@ def _():
     mo.md(r"""
     ## Exercise: which press made these?
 
-    Use the two-press mint from notebook 4. The fair press stamps $p\sim\mathcal{TN}(0.5, 0.02)$,
+    Use the two-press mint from notebook 5. The fair press stamps $p\sim\mathcal{TN}(0.5, 0.02)$,
     the worn press stamps $p\sim\mathcal{TN}(\mu_\mathrm{worn}, 0.08)$ (this time
     $\sigma_\mathrm{worn}$ is held fixed), and a fraction $f_\mathrm{fair}$ of the coins come from
     the fair press.
@@ -466,7 +475,7 @@ def _():
         d, two_press,
         dict(f_fair=dist.Uniform(0, 1), mu_worn=dist.Uniform(0.5, 1.0)),
         N=500, seed=0, num_warmup=300, num_samples=1000,
-    ).samples
+    ).to_dataframe()
     fig, _ = style.corner([post], ["f_fair", "mu_worn"], truths=L_two)
     post["N_eff_min"].describe()
     ```

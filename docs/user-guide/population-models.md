@@ -368,4 +368,4 @@ float(jnp.abs(r - r_slow).max())
 ```
 
 For more, see [Population inference](population-inference.md), which uses these models, and
-tutorial [04](https://github.com/Potatoasad/astroinfer/blob/main/tutorials/04_coin_mint.py).
+tutorial [05](https://github.com/Potatoasad/astroinfer/blob/main/tutorials/05_coin_mint.py).

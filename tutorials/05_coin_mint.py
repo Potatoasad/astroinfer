@@ -35,7 +35,7 @@ with app.setup:
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    # 4. The coin mint
+    # 5. The coin mint
 
     So far every coin had one true bias $p$, and we inferred it. Now consider a *mint* that stamps
     out thousands of coins. Imperfections in the press give each coin a slightly different bias, and
@@ -49,8 +49,16 @@ def _():
     sloppy it is, and how many of its machines are worn out.
 
     This notebook shows how to write down $\pi(\theta\mid\Lambda)$ with `astroinfer.generative`.
-    Notebook 5 then infers $\Lambda$ from flipped coins.
+    Notebook 6 then infers $\Lambda$ from flipped coins.
     """)
+    return
+
+
+@app.cell(hide_code=True)
+def _():
+    mo.image(src=mo.notebook_dir() / "images" / "05_coin_mint.svg",
+             alt="A mint stamping coins, each with its own probability of heads",
+             width=640)
     return
 
 
@@ -58,7 +66,7 @@ def _():
 def _():
     mo.md(r"""
     The parameters are the `Coin` class from notebook 1, with one field `p`. We only need the class
-    here; the flips come back in notebook 5.
+    here; the flips come back in notebook 6.
     """)
     return
 
@@ -74,7 +82,7 @@ def _():
     mo.md(r"""
     ## Population models
 
-    You could write a population with numpyro or scipy, but hierarchical inference (notebook 5)
+    You could write a population with numpyro or scipy, but hierarchical inference (notebook 6)
     needs two things from a population model. It has to draw samples
     $\theta\sim\pi(\theta\mid\Lambda)$ that are a smooth, differentiable function of $\Lambda$, so
     that the sampler can follow gradients, and it has to evaluate $\log\pi(\theta\mid\Lambda)$ at
@@ -282,7 +290,7 @@ def _(Lambda_two, two_press_mint):
 def _():
     mo.md(r"""
     You can also pass the uniforms yourself with `seeds={variable: u_array}`, which is what the
-    likelihood in notebook 5 does. Because the draws are differentiable, you can take `jax.grad`
+    likelihood in notebook 6 does. Because the draws are differentiable, you can take `jax.grad`
     with respect to $\Lambda$ of any quantity computed from samples. The table shows the gradient of
     the mint's average bias with respect to each hyperparameter, next to a finite-difference
     estimate:
@@ -411,7 +419,7 @@ def _():
     ## Writing your own leaf
 
     If none of the built-in leaves fit, subclass `Distribution`. As an example we write a power
-    law, $\pi(x)\propto x^{\gamma}$ on $[x_\mathrm{lo}, x_\mathrm{hi}]$. Notebook 6 uses this class
+    law, $\pi(x)\propto x^{\gamma}$ on $[x_\mathrm{lo}, x_\mathrm{hi}]$. Notebook 7 uses this class
     for stars spread uniformly in volume around us, $\pi(r)\propto r^2$.
     """)
     return
@@ -512,7 +520,7 @@ def _():
     * `.sample(Lambda, key=, shape=)`, `.sample(Lambda, seeds=)` and `.log_prob(values, Lambda)`.
       With a fixed key or fixed seeds, the draws are differentiable in $\Lambda$.
 
-    In notebook 5 we flip coins from the mint and infer $\Lambda$.
+    In notebook 6 we flip coins from the mint and infer $\Lambda$.
     """)
     return
 

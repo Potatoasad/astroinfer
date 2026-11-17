@@ -463,5 +463,5 @@ catalog.fit("summary")
 `remove_representation(name)` removes a representation and its fits. The raw representation
 cannot be removed.
 
-Tutorial `tutorials/09_your_own_representation.py` builds a Gaussian representation with
+Tutorial `tutorials/10_your_own_representation.py` builds a Gaussian representation with
 per-event settings, and the `astroinfer_tgmm` package provides truncated Gaussian mixtures.

@@ -468,7 +468,7 @@ wheels = [
 [[package]]
 name = "gravpop"
 version = "0.1.1"
-source = { git = "https://git.ligo.org/asad.hussain/gravpop?rev=simplify-composite#2e558d072fac9925bbd8605fbb7de95e8749f250" }
+source = { git = "https://git.ligo.org/asad.hussain/gravpop?rev=simplify-composite#b687d9a70d1696157eafed314de0f788ffa904be" }
 dependencies = [
     { name = "astropy" },
     { name = "corner" },

@@ -180,10 +180,15 @@ sampler.samples[["mu", "sigma", "N_eff_min"]].describe().loc[["mean", "std", "mi
 available as the function `ai.population_inference(measurement, ...)`, just as `PE` is available
 as `ai.parameter_estimation(measurement, ...)`.
 
+It returns a `PosteriorData` whose `theta` holds the draws of $\Lambda$, with the Monte Carlo
+diagnostics among its sample stats. A population model that declares a `hyperparameter_type`
+gets $\Lambda$ as that type; otherwise the type is built from the sampled names.
+
 ```{code-cell} python
-sampler = camera.population_inference(data[:200], population, hyper_priors, N=500, seed=0,
-                                      num_warmup=300, num_samples=1000, summary=False)
-sampler.samples[["mu", "sigma"]].mean()
+hyper_posterior = camera.population_inference(data[:200], population, hyper_priors, N=500,
+                                              seed=0, num_warmup=300, num_samples=1000,
+                                              summary=False)
+hyper_posterior.summary()
 ```
 
 ## Detection triggers
@@ -316,7 +321,7 @@ sources, which are brighter and less spread out than the population.
 
 To use such a subclass with `population_inference`, pass it as `likelihood_cls=`, binding the
 extra arguments with `functools.partial`. Tutorial
-[06](https://github.com/Potatoasad/astroinfer/blob/main/tutorials/06_flux_limited_survey.py) works through this correction on a flux-limited
+[07](https://github.com/Potatoasad/astroinfer/blob/main/tutorials/07_flux_limited_survey.py) works through this correction on a flux-limited
 survey.
 
 ## Proposals
@@ -327,7 +332,7 @@ draws the parameters of each source near its data instead, and the draws are rew
 
 $$
 \hat Z_i(\Lambda) = \frac{1}{N}\sum_{j=1}^{N}
-\frac{K(d_i\mid\theta_{ij})\,\pi(\theta_{ij}\mid\Lambda)}{q(\theta_{ij}\mid d_i)}, \qquad
+\frac{\mathcal{L}(d_i\mid\theta_{ij})\,\pi(\theta_{ij}\mid\Lambda)}{q(\theta_{ij}\mid d_i)}, \qquad
 \theta_{ij}\sim q(\cdot\mid d_i).
 $$
 
@@ -395,5 +400,94 @@ $\log \mathcal{L} + \log\pi(\theta\mid\Lambda) - \log q(\theta\mid d)$. Override
 weight, for example when $q$ draws some parameters from the population itself
 and that factor cancels between $\pi$ and $q$. The default weight cannot be used with a
 population model that has external variables; in that case `log_weights` raises an error and
-has to be overridden. Tutorial [07](https://github.com/Potatoasad/astroinfer/blob/main/tutorials/07_sharper_telescopes.py) builds a proposal
+has to be overridden. Tutorial [08](https://github.com/Potatoasad/astroinfer/blob/main/tutorials/08_sharper_telescopes.py) builds a proposal
 for a survey whose data are much more precise than the population is wide.
+
+## Joint inference
+
+`population_inference` integrates out the parameters of every source inside each evaluation of
+the likelihood. `joint_population_inference` samples them instead, together with $\Lambda$, from
+the joint posterior
+
+$$
+p(\Lambda, \theta_1, \ldots, \theta_E \mid d) \propto
+\pi(\Lambda) \prod_{i=1}^{E} \mathcal{L}(d_i\mid\theta_i)\,\pi(\theta_i\mid\Lambda).
+$$
+
+Ignoring the $\theta_i$ draws leaves draws from the same $p(\Lambda\mid d)$, with no Monte Carlo
+estimate of $Z_i$ and so no effective number of draws to check. The cost moves to the sampler,
+which explores every $\theta_i$ as well as $\Lambda$: here $2 \times 200 + 2 = 402$ dimensions.
+
+The two methods suit opposite regimes. When the measurements are narrow compared with the
+population, as here, few population draws land near the data and $N_\mathrm{eff}$ collapses,
+while the joint posterior splits into narrow, nearly independent pieces that NUTS samples
+easily. When the measurements are broad, the Monte Carlo estimate is accurate, but $\Lambda$ and
+the $\theta_i$ become strongly correlated (a funnel), and NUTS slows down or reports divergent
+transitions.
+
+The population model must provide a density $\pi(\theta\mid\Lambda)$ normalized over $\theta$
+for every $\Lambda$; its `sample` is not used. Each field of $\theta_i$ is sampled on the support
+declared with `parameter(support=...)`, with a flat density there. `local_priors` takes PE
+priors instead, in the form `PE` accepts, and applies them to every source. Their density is
+divided back out, so the posterior is unchanged, but they set the support of each $\theta_i$,
+which must contain the population's. `Source` declares no supports, so we pass PE priors that
+cover the population:
+
+```{code-cell} python
+pe_priors = {"x": dist.Uniform(-1.0, 1.0), "flux": dist.Uniform(0.0, 20.0)}
+joint = camera.joint_population_inference(
+    data[:200], population, hyper_priors, local_priors=pe_priors,
+    init=CameraProposal(camera), seed=0, num_warmup=300, num_samples=1000, summary=False,
+)
+joint
+```
+
+`init` sets the starting point. With a proposal, each $\theta_i$ starts at a draw from
+$q(\theta\mid d_i)$ at the median of the hyperpriors, which is also where $\Lambda$ starts for
+hyperpriors given as distributions. Sources whose starting density is zero are redrawn. A
+parameter object with batch shape `(E,)` can be passed instead of a proposal. Without `init`,
+numpyro starts every site uniformly in $(-2, 2)$ on the unconstrained scale, which is enough for
+small problems.
+
+The result is a `PosteriorData` whose `theta` holds $\Lambda$ and whose `local` holds the
+$\theta_i$, with the sample axes followed by an `observation` axis:
+
+```{code-cell} python
+joint.local.batch_shape, joint.local_dims
+```
+
+The three estimates of $\Lambda$ from the same 200 sources are the plain Monte Carlo one from
+[above](#sampling-the-hyperparameters), one with the proposal, and the joint one:
+
+```{code-cell} python
+with_q = camera.population_inference(data[:200], population, hyper_priors, N=500, seed=0,
+                                     proposal=CameraProposal(camera), num_warmup=300,
+                                     num_samples=1000, summary=False)
+pd.concat({"population draws": hyper_posterior.summary()[["mean", "sd"]],
+           "proposal": with_q.summary()[["mean", "sd"]],
+           "joint": joint.summary(["mu", "sigma"])[["mean", "sd"]]}, axis=1).round(3)
+```
+
+The joint estimate agrees with the one that uses a proposal. The plain Monte Carlo estimate is
+about 0.05 higher in $\mu$ and 0.03 higher in $\sigma$, the bias from sources with few effective
+draws described in [Checking the effective number of draws](#checking-the-effective-number-of-draws).
+
+`summary()` shows each field of `local` as one row, with its smallest effective sample size and
+largest $\hat R$ over the 200 sources:
+
+```{code-cell} python
+joint.summary()
+```
+
+Each source's $\theta_i$ draws are its posterior given the population as well as its own data.
+`posterior_predictive` replicates the data from them, here for 100 random draws:
+
+```{code-cell} python
+replicated = camera.posterior_predictive(joint, draws=100, key=0)
+replicated.batch_shape
+```
+
+A `PopulationModel` can define `derived_parameters_single(theta, Lambda)`, for example the
+probability that a source belongs to each component of a mixture. Joint inference evaluates it
+for every draw and source and stores the result in `extras`, next to the measurement's derived
+parameters.

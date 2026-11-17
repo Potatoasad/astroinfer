@@ -29,7 +29,7 @@ with app.setup:
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    # 3. The doctor's office
+    # 4. The doctor's office
 
     A patient walks into a doctor's office. The doctor is in a hurry and writes down only one
     number, the patient's BMI, $w/h^2$, measured with a little noise. What can we say about the
@@ -43,6 +43,14 @@ def _():
     of $\theta$), the `PosteriorData` object that `.PE(..., as_posterior=True)` returns, and custom
     displays for measurement processes and for any object of your own.
     """)
+    return
+
+
+@app.cell(hide_code=True)
+def _():
+    mo.image(src=mo.notebook_dir() / "images" / "04_doctors_office.svg",
+             alt="A patient on a scale next to a height rod, and their chart",
+             width=640)
     return
 
 
@@ -182,12 +190,13 @@ def _(chart, office):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    A `PosteriorData` has five parts, which you can see by expanding the object above:
+    A `PosteriorData` has six parts, which you can see by expanding the object above:
 
     | attribute | contents | here |
     |---|---|---|
-    | `theta` | the draws, as your parameter type with batch shape `(n_draws,)` | a `Person` |
-    | `sample_stats` | per-draw inference quantities | `log_likelihood`, `prior`, `log_prior[weight]`, `log_prior[height]` |
+    | `theta` | the draws, as your parameter type with one batch axis per sample axis | a `Person` |
+    | `sample_dims` | the names of the sample axes | `("chain", "draw")` |
+    | `sample_stats` | per-draw inference quantities | `log_likelihood`, `prior`, `log_prior[weight]`, `log_prior[height]`, and the NUTS statistics such as `accept_prob` and `diverging` |
     | `extras` | other per-draw columns, such as derived parameters | `BMI`, `weight_lb` |
     | `metadata` | information about the run | sampler, seed, number of draws |
     | `observed_data` | the $d$ the posterior is conditioned on | a `Chart` |
@@ -198,7 +207,8 @@ def _():
 @app.cell
 def _(chart, patient, posterior):
     def plot_people(ax, people, *, color, label, n=2500):
-        w, h = np.asarray(people.weight)[:n], np.asarray(people.height)[:n]
+        # ravel merges the chain and draw axes, so [:n] takes the first n draws.
+        w, h = np.ravel(people.weight)[:n], np.ravel(people.height)[:n]
         ax.scatter(w, h, s=4, alpha=0.35, color=color, linewidths=0, rasterized=True)
         ax.plot([], [], "o", color=color, label=label)
 
@@ -236,24 +246,32 @@ def _():
     ## Working with a `PosteriorData`
 
     Indexing by name returns a column, whether it is a parameter, a sample statistic or an extra.
-    Indexing by draw (an integer, a slice or a boolean mask) returns a smaller `PosteriorData`, with
-    every per-draw array sliced the same way:
+
+    NUTS draws have two sample axes, a chain and a draw, named in `sample_dims`; here there is one
+    chain of 4000 draws. Indexing with integers, slices or boolean masks selects along those axes
+    in order and returns a smaller `PosteriorData`, with every per-draw array sliced the same way.
+    `isel` does the same by axis name. A boolean mask selects along one axis, so a selection by
+    value is made after `stack_samples()`, which merges the sample axes into one:
     """)
     return
 
 
 @app.cell
 def _(posterior):
-    overweight = posterior[posterior["BMI"] > 20.5]
-    first_100 = posterior[:100]
+    flat = posterior.stack_samples()
+    overweight = flat[flat["BMI"] > 20.5]
+    first_100 = posterior[:, :100]
     mo.md(f"""
     | expression | result |
     |---|---|
+    | `posterior.sizes` | `{posterior.sizes}` |
     | `posterior["height"]` | array of shape `{posterior["height"].shape}` |
     | `posterior["BMI"]` (an extra) | mean {float(posterior["BMI"].mean()):.2f} |
     | `posterior["log_likelihood"]` (a sample stat) | shape `{posterior["log_likelihood"].shape}` |
-    | `posterior[:100]` | `{first_100!r}` |
-    | `posterior[posterior["BMI"] > 20.5]` | {overweight.batch_shape[0]} draws |
+    | `posterior[:, :100]` | `{first_100!r}` |
+    | `posterior.isel(draw=slice(100)).sizes` | `{posterior.isel(draw=slice(100)).sizes}` |
+    | `flat = posterior.stack_samples()` | `{flat.sizes}` |
+    | `flat[flat["BMI"] > 20.5]` | {overweight.num_samples} draws |
     | `posterior.variable_names` | `{posterior.variable_names}` |
     | `posterior.metadata` | `{posterior.metadata}` |
     """)
@@ -263,7 +281,8 @@ def _(posterior):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    A `PosteriorData` can be converted to and from a DataFrame. `from_dataframe` sorts the columns
+    A `PosteriorData` can be converted to and from a DataFrame. `to_dataframe` stacks the sample
+    axes first and keeps the chain of every draw as a column. `from_dataframe` sorts the columns
     back into `theta`, `sample_stats` (recognised names such as `prior`, `log_prior[...]` and
     `log_likelihood`) and `extras` (everything else). You can use it to bring in posteriors from
     other samplers:
@@ -317,7 +336,7 @@ def _():
     mo.md(r"""
     ### Content hash
 
-    `content_hash()` is a hash of every per-draw array. Catalogs (notebook 8) use it to detect when
+    `content_hash()` is a hash of every per-draw array. Catalogs (notebook 9) use it to detect when
     a posterior has changed, so that anything fitted to it is known to be out of date. Slicing the
     posterior changes the hash:
     """)
@@ -331,7 +350,7 @@ def _(posterior):
     |---|---|
     | `posterior` | `{posterior.content_hash()[:16]}` |
     | `posterior` again | `{posterior.content_hash()[:16]}` |
-    | `posterior[:100]` | `{posterior[:100].content_hash()[:16]}` |
+    | `posterior[:, :100]` | `{posterior[:, :100].content_hash()[:16]}` |
     """)
     return
 
@@ -520,7 +539,7 @@ class PatientChart(ai.RichDisplay):
         p_tall = float(np.mean(np.asarray(self.posterior["height"]) > 1.70))
         return (html_table(["", "median", "90% interval"], rows)
                 + kv_table({"P(taller than 1.70 m)": f"{p_tall:.1%}",
-                            "draws": self.posterior.batch_shape[0]}))
+                            "draws": self.posterior.num_samples}))
 
 
 @app.cell
@@ -544,7 +563,7 @@ def _():
       `_display_body`.
 
     Every analysis so far has been about a single object: one coin, one lighthouse, one patient.
-    Notebook 4 turns to populations, the distributions that such objects are drawn from.
+    Notebook 5 turns to populations, the distributions that such objects are drawn from.
     """)
     return
 

@@ -20,7 +20,9 @@ from .display import RichDisplay
 from .latent import LatentSpace
 from .inference import (
     FixedDataLikelihood,
+    JointPopulationLikelihood,
     PopulationLikelihood,
+    joint_population_inference,
     parameter_estimation,
     population_inference,
     run_sampler,
@@ -41,6 +43,7 @@ from .representations import RawFit, RawSamples, register
 __all__ = [
     "Catalog",
     "FixedDataLikelihood",
+    "JointPopulationLikelihood",
     "LatentSpace",
     "MeasurementProcess",
     "ParameterSpec",
@@ -56,6 +59,7 @@ __all__ = [
     "coerce",
     "detection",
     "generative",
+    "joint_population_inference",
     "parameter",
     "parameter_dataclass",
     "parameter_estimation",

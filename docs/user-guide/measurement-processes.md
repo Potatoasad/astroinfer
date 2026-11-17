@@ -224,6 +224,8 @@ Each row of the result is one draw, with these columns:
 | `log_likelihood` | $\log \mathcal{L}(d\mid\theta)$ at the draw |
 | `log_prior[<field>]` | the log prior density of that field |
 | `prior` | the prior density of the draw, the product of the fields' prior densities |
+| `accept_prob`, `diverging`, `energy`, `num_steps`, `potential_energy`, `adapt_state.step_size` | the NUTS statistics of the draw |
+| `chain` | the chain the draw came from |
 | one per derived parameter | the output of `derived_parameters` |
 
 A prior can also be a gravpop prior block. A block with `var_names` and a `log_prob(theta)` method
@@ -256,18 +258,20 @@ posterior = camera.PE(d, priors, seed=0, as_posterior=True,
 posterior
 ```
 
-A `PosteriorData` has five parts:
+A `PosteriorData` has these parts:
 
 | attribute | contents |
 |---|---|
-| `theta` | the draws, as the parameter type with batch shape `(n_draws,)` |
-| `sample_stats` | per-draw inference quantities: `log_likelihood`, `prior`, `log_prior[...]` |
+| `theta` | the draws, as the parameter type with one batch axis per sample axis |
+| `sample_dims` | the names of the sample axes, `("chain", "draw")` for NUTS |
+| `sample_stats` | per-draw inference quantities: `log_likelihood`, `prior`, `log_prior[...]` and the sampler's statistics |
 | `extras` | other per-draw columns, such as derived parameters |
 | `metadata` | information about the run |
 | `observed_data` | the data $d$ the posterior is conditioned on |
+| `local` | for joint population inference only, the parameters of every observation (see [Population inference](population-inference.md#joint-inference)) |
 
 ```{code-cell} python
-posterior.theta.batch_shape, list(posterior.sample_stats), list(posterior.extras), posterior.metadata
+posterior.sizes, list(posterior.sample_stats), list(posterior.extras), posterior.metadata
 ```
 
 ```{code-cell} python
@@ -281,17 +285,63 @@ extras:
 posterior.parameter_type.__name__, posterior.variable_names
 ```
 
+### Sample axes
+
+The sample axes are named by `sample_dims`, and `sizes` maps each name to its length. NUTS gives a
+chain axis and a draw axis. The keyword `mcmc_kwargs` is passed on to numpyro's `MCMC`, so it sets
+the number of chains:
+
+```{code-cell} python
+chains = camera.PE(d, priors, seed=0, as_posterior=True,
+                   num_warmup=300, num_samples=1000, summary=False,
+                   mcmc_kwargs={"num_chains": 4, "chain_method": "sequential",
+                                "progress_bar": False})
+chains.sizes
+```
+
+`summary()` gives the mean, standard deviation and 90% central interval of every field, with its
+effective sample size and split $\hat R$. $\hat R$ compares chains, so it is NaN for a posterior
+without a chain axis. The number of divergent transitions is in `attrs`:
+
+```{code-cell} python
+table = chains.summary()
+table.attrs["divergences"], table
+```
+
+A field with core axes, such as one value per star, takes one row in the summary, with its
+smallest effective sample size and largest $\hat R$; `summary(expand=True)` gives a row per element.
+
+`stack_samples()` merges the sample axes into one axis of draws, chain after chain, and keeps the
+chain of every draw in `sample_stats["chain"]`. Plots, tables and catalogs use this form:
+
+```{code-cell} python
+stacked = chains.stack_samples()
+stacked.sizes, stacked.sample_stats["chain"][[0, 999, 1000, 3999]]
+```
+
+With `arviz` installed, `to_arviz()` converts a posterior for ArviZ's plots and diagnostics. The
+dims of each variable are the sample dims followed by the field's `index`.
+
 ### Indexing
 
-A string returns that column from whichever part holds it. An integer, slice or boolean mask
-selects draws and returns a new `PosteriorData`, with every per-draw array indexed the same way:
+A string returns that column from whichever part holds it. Integers, slices and 1-D boolean or
+integer arrays index the sample axes in order, and every per-draw array is indexed the same way.
+An integer removes its axis from `sample_dims`; the other indices keep it. `isel` indexes by name:
 
 ```{code-cell} python
 posterior["flux"].shape, posterior["magnitude"].shape, posterior["log_likelihood"].shape
 ```
 
 ```{code-cell} python
-posterior[:100].batch_shape, posterior[posterior["flux"] > 3.0].batch_shape
+posterior[0].sample_dims, posterior[:, :100].sizes, posterior.isel(draw=slice(None, 100)).sizes
+```
+
+A boolean mask indexes one axis, so a selection of draws by value is made on the stacked
+posterior:
+
+```{code-cell} python
+stacked = posterior.stack_samples()
+stacked[stacked["flux"] > 3.0].sizes
 ```
 
 `variables(names)` returns several columns as a dict:
@@ -306,7 +356,7 @@ list(posterior.variables(["x", "magnitude", "prior"]))
 built from the `log_prior[...]` columns. For all fields it returns the `prior` column:
 
 ```{code-cell} python
-posterior.marginal_prior(["x"])[:3], posterior.marginal_prior(["flux"])[:3]
+stacked.marginal_prior(["x"])[:3], stacked.marginal_prior(["flux"])[:3]
 ```
 
 A derived column has no stored prior. Asking for it without all the fields raises an error:
@@ -323,7 +373,7 @@ posterior.marginal_prior(["magnitude"])
 the draws changes it:
 
 ```{code-cell} python
-posterior.content_hash()[:16], posterior[:500].content_hash()[:16]
+posterior.content_hash()[:16], posterior[:, :500].content_hash()[:16]
 ```
 
 [Catalogs](catalogs.md) use the hash to detect when a posterior has been replaced.
@@ -369,4 +419,4 @@ ai.PosteriorData(theta=Source(x=jnp.zeros(5), flux=1.0), extras={"score": jnp.on
 ```
 
 Names may not appear in more than one part. For examples of `PosteriorData` in use, see
-[the doctor's office tutorial](https://github.com/Potatoasad/astroinfer/blob/main/tutorials/03_doctors_office.py).
+[the doctor's office tutorial](https://github.com/Potatoasad/astroinfer/blob/main/tutorials/04_doctors_office.py).

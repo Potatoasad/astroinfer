@@ -34,7 +34,7 @@ with app.setup:
         TUTORIAL_DIR = Path(__file__).resolve().parent
     except NameError:
         TUTORIAL_DIR = Path(mo.notebook_dir())
-    CATALOG_DIR = TUTORIAL_DIR / "data" / "star_catalog"            # written by notebook 8
+    CATALOG_DIR = TUTORIAL_DIR / "data" / "star_catalog"            # written by notebook 9
     GAUSS_DIR = TUTORIAL_DIR / "data" / "star_catalog_gauss"        # written here
 
     R_MIN, R_MAX = 0.5, 2.0
@@ -46,9 +46,9 @@ with app.setup:
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    # 9. Your own representation
+    # 10. Your own representation
 
-    In notebook 8 the catalog passed posteriors to the population analysis as raw draws. Raw draws
+    In notebook 9 the catalog passed posteriors to the population analysis as raw draws. Raw draws
     are one *representation* of a posterior, and there are others that are often better. A
     Gaussian, or a mixture of Gaussians, is compact and smooth and can be integrated analytically.
     A truncated Gaussian mixture, provided by the `astroinfer_tgmm` extension, fits posteriors that
@@ -89,7 +89,7 @@ def _():
     | `stack(products)` (optional) | combine events into `(E, ...)` arrays; the default stacks equal shapes |
 
     A fit is *stale* when `fit.fit_key != fitter.fit_key(event, source_key)`. Since `source_key` is
-    the hash of the posterior (notebook 8), a fit becomes stale when you change one of its settings
+    the hash of the posterior (notebook 9), a fit becomes stale when you change one of its settings
     or replace the posterior. Changing a data-product option does not make it stale.
     """), kind="info")
     return
@@ -100,7 +100,7 @@ def _():
     mo.md(r"""
     ## The survey and its catalog
 
-    The classes are the same as in notebooks 6 and 8. We load the catalog that notebook 8 saved,
+    The classes are the same as in notebooks 7 and 9. We load the catalog that notebook 9 saved,
     passing `types=` because the classes are defined in this notebook. If that catalog does not
     exist yet, a smaller one is built in memory.
     """)
@@ -188,7 +188,7 @@ def _():
 def _(Lambda_true, pe_priors, pop_model, telescope, trigger):
     if CATALOG_DIR.exists():
         catalog = ai.Catalog.load(CATALOG_DIR, types=[Star, StarObservation])
-        _source = f"Loaded notebook 8's catalog from `{CATALOG_DIR.relative_to(TUTORIAL_DIR)}`."
+        _source = f"Loaded notebook 9's catalog from `{CATALOG_DIR.relative_to(TUTORIAL_DIR)}`."
     else:
         _stars = Star.from_dict(pop_model.sample(Lambda_true, key=jax.random.key(0), shape=(5000,)))
         _obs = telescope.sample(_stars, key=1)
@@ -199,8 +199,8 @@ def _(Lambda_true, pe_priors, pop_model, telescope, trigger):
                                  num_warmup=300, num_samples=1500)
             catalog.add_event(f"star_{_i:02d}", _post, metadata={
                 "truth": {k: float(v) for k, v in _stars[_idx[_i]].to_dict().items()}})
-        _source = ("Notebook 8's catalog was not found, so a 12-star catalog was built in memory. "
-                   "Run notebook 8 first for the full 40 stars.")
+        _source = ("Notebook 9's catalog was not found, so a 12-star catalog was built in memory. "
+                   "Run notebook 9 first for the full 40 stars.")
     mo.vstack([mo.md(_source), catalog])
     return (catalog,)
 
@@ -517,14 +517,14 @@ def _():
 
     The PE prior $\pi$ is flat here, so it only contributes a constant. Below we evaluate the
     hyperparameter likelihood on a grid and compare it with the raw-draws estimator from
-    notebook 8. Both include the selection term, with the same injections as notebook 6.
+    notebook 9. Both include the selection term, with the same injections as notebook 7.
     """)
     return
 
 
 @app.cell
 def _(pop_model, telescope, trigger):
-    # Injections for the selection term, as in notebook 6.
+    # Injections for the selection term, as in notebook 7.
     Lg = dict(mu_L=0.5, sigma_L=1.5)
     inj = pop_model.sample(Lg, key=jax.random.key(5), shape=(50000,))
     found = trigger.detect(telescope.sample(Star.from_dict(inj), key=6), np.random.default_rng(7))

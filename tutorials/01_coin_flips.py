@@ -30,7 +30,7 @@ def _():
     mo.md(r"""
     # 1. Is this coin rigged?
 
-    This is the first of nine notebooks on astroinfer. By the end of the series you should be able
+    This is the first of ten notebooks on astroinfer. By the end of the series you should be able
     to write a forward model for your own experiment and run both single-event and population
     inference on it. Each notebook works through one problem:
 
@@ -38,13 +38,14 @@ def _():
     |---|---|---|
     | 1 | is this coin rigged? | parameters, data, and a first `MeasurementProcess` |
     | 2 | the lighthouse | batches, core axes, JAX, constrained parameters |
-    | 3 | the doctor's office | `PosteriorData`, derived parameters, custom displays |
-    | 4 | the coin mint | population models with `astroinfer.generative` |
-    | 5 | auditing the mint | hierarchical inference with `PopulationLikelihood` |
-    | 6 | a flux-limited survey | detection triggers and selection effects |
-    | 7 | sharper telescopes | importance sampling with a `Proposal` |
-    | 8 | the star catalog | `Catalog`, data products, save / load |
-    | 9 | your own representation | the `Fit` / `Fitter` protocol |
+    | 3 | a transiting planet | methods on a data class, posterior predictive checks |
+    | 4 | the doctor's office | `PosteriorData`, derived parameters, custom displays |
+    | 5 | the coin mint | population models with `astroinfer.generative` |
+    | 6 | auditing the mint | hierarchical inference with `PopulationLikelihood` |
+    | 7 | a flux-limited survey | detection triggers and selection effects |
+    | 8 | sharper telescopes | importance sampling with a `Proposal` |
+    | 9 | the star catalog | `Catalog`, data products, save / load |
+    | 10 | your own representation | the `Fit` / `Fitter` protocol |
 
     ## Parameters, data and the measurement process
 
@@ -63,6 +64,14 @@ def _():
 
     We'll start with the simplest experiment there is, flipping a coin.
     """)
+    return
+
+
+@app.cell(hide_code=True)
+def _():
+    mo.image(src=mo.notebook_dir() / "images" / "01_coin_flips.svg",
+             alt="A coin being flipped, and the list of heads and tails it produces",
+             width=640)
     return
 
 
@@ -287,7 +296,7 @@ def _():
     [numpyro distributions](https://num.pyro.ai/en/stable/distributions.html). It runs NUTS on
     $\mathcal{L}(d\mid\theta)\,\pi(\theta)$ and returns the posterior draws in a DataFrame, along with the log
     likelihood and the prior density of each draw. Those last two columns come up again in
-    notebook 8. With `just_prior=True` it samples the prior instead, which we plot below for
+    notebook 9. With `just_prior=True` it samples the prior instead, which we plot below for
     comparison.
     """)
     return

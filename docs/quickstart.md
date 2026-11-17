@@ -170,9 +170,10 @@ posterior
 ```
 
 The result is a `PosteriorData`. Its display shows the 1000 draws as a batch of `Source` objects,
-$\{\theta_n\}$ with $n \in 1\ldots 1000$, which `posterior.theta` returns. Below them are the log
-likelihood and prior density of every draw under *Sample Statistics*, the run's metadata, and the
-measurement $d$ the posterior is conditioned on. Indexing with a field name returns the draws of
+$\{\theta_{n_0,n_1}\}$, which `posterior.theta` returns. The two batch axes are the sample axes
+`("chain", "draw")`, here one chain of 1000 draws. Below them are the log likelihood, the prior
+density and the sampler's statistics for every draw under *Sample Statistics*, the run's metadata,
+and the measurement $d$ the posterior is conditioned on. Indexing with a field name returns the draws of
 that field. Their means are:
 
 ```{code-cell} python
@@ -216,13 +217,14 @@ For more, see [Population models](user-guide/population-models.md).
 
 `population_inference` samples the hyperparameters $\Lambda$ given a batch of measurements of
 independent sources. For each source it averages $\mathcal{L}(d_i\mid\theta)$ over `N` draws from the
-population.
+population. The result is a `PosteriorData` whose `theta` holds the draws of $\Lambda$, and
+`summary()` gives their means, standard deviations and sampling diagnostics:
 
 ```{code-cell} python
 hyper_priors = {"mu": dist.Uniform(0.0, 6.0), "sigma": dist.Uniform(0.2, 3.0)}
-sampler = camera.population_inference(data, population, hyper_priors, N=500, seed=0,
-                                      num_warmup=300, num_samples=1000, summary=False)
-sampler.samples[["mu", "sigma"]].mean()
+hyper_posterior = camera.population_inference(data, population, hyper_priors, N=500, seed=0,
+                                              num_warmup=300, num_samples=1000, summary=False)
+hyper_posterior.summary()
 ```
 
 The true values were $\mu = 3$ and $\sigma = 1$. Real surveys only detect some sources, and

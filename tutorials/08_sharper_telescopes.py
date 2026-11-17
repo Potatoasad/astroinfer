@@ -37,10 +37,10 @@ with app.setup:
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    # 7. Sharper telescopes
+    # 8. Sharper telescopes
 
     The observatory has a new telescope that measures fluxes and parallaxes ten times more
-    precisely than the one in notebook 6. You would expect better data to give a better answer,
+    precisely than the one in notebook 7. You would expect better data to give a better answer,
     but with the per-star integrals computed the way we have done so far, the analysis of notebook
     6 fails on the sharper data. This notebook shows why, and fixes it with a `Proposal`, an
     importance-sampling distribution that draws each star's parameters close to where its data put
@@ -51,10 +51,18 @@ def _():
 
 @app.cell(hide_code=True)
 def _():
+    mo.image(src=mo.notebook_dir() / "images" / "08_sharper_telescopes.svg",
+             alt="The same stars seen through a blurry and a sharp telescope",
+             width=640)
+    return
+
+
+@app.cell(hide_code=True)
+def _():
     mo.md(r"""
     ## The survey
 
-    The stars, population, flux limit and selection term are the same as in notebook 6. Only the
+    The stars, population, flux limit and selection term are the same as in notebook 7. Only the
     telescope's noise levels change.
     """)
     return
@@ -161,7 +169,7 @@ def _():
     Lambda_true = dict(mu_L=0.0, sigma_L=0.7)
 
     trigger = ai.detection.ThresholdTrigger(threshold=-0.3, statistic="log_flux")
-    blurry = Telescope()                                            # notebook 6
+    blurry = Telescope()                                            # notebook 7
     sharp = Telescope(sigma_log_flux=0.02, sigma_parallax=0.02)     # the upgrade
     mo.hstack([blurry, sharp], justify="start", gap=2)
     return Lambda_true, blurry, luminosity, pop_model, sharp, trigger, volume
@@ -237,7 +245,7 @@ def _():
     mo.md(r"""
     With only a handful of effective draws per star, $\log\hat Z_i(\Lambda)$ is dominated by
     noise. The noise also biases the result, because populations that happen to put their darts
-    near the data look better than they are. To see the effect, we run the notebook 6 analysis
+    near the data look better than they are. To see the effect, we run the notebook 7 analysis
     anyway, starting with the injections for the selection term, simulated through the sharp
     telescope:
     """)
@@ -487,7 +495,7 @@ def _(N_Q, data, hyper_priors, pop_model, proposal, selection, sharp):
         N=N_Q, seed=3, proposal=proposal,
         likelihood_cls=partial(SelectedLikelihood, **selection),
         num_warmup=300, num_samples=1000,
-    ).samples
+    ).to_dataframe()
     fixed[["mu_L", "sigma_L"]].describe().loc[["mean", "std"]]
     return (fixed,)
 
@@ -620,7 +628,7 @@ def _():
     * To change the weight, for example when a factor shared by $p$ and $q$ cancels, override
       `log_weights(Lambda)`.
 
-    So far every analysis has started from the raw data $d_i$. Notebook 8 starts instead from what
+    So far every analysis has started from the raw data $d_i$. Notebook 9 starts instead from what
     real catalogs publish, the posterior samples of each event, collected in a `Catalog`.
     """)
     return

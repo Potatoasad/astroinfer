@@ -8,11 +8,13 @@ generated files and are not committed.
 
 Each notebook gets a hidden first cell that installs scripts/marimo_docs_shim.py as `marimo`.
 Cells whose code is hidden in marimo and that only show static text (`mo.md`, `mo.callout`,
-`mo.accordion`) become markdown cells. Exercise cells are emptied back to their placeholder.
+`mo.accordion`) or an image (`mo.image`) become markdown cells; tutorials/images/ is copied
+next to the notebooks. Exercise cells are emptied back to their placeholder.
 """
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -118,7 +120,15 @@ def convert(notebook: dict, path: Path) -> dict:
 
 def main() -> None:
     OUTPUT.mkdir(parents=True, exist_ok=True)
-    for path in sorted(TUTORIALS.glob("[0-9]*.py")):
+    marimo_docs_shim.set_notebook_dir(TUTORIALS)
+    tutorials = sorted(TUTORIALS.glob("[0-9]*.py"))
+    # Remove notebooks of tutorials that were renamed or deleted.
+    for old in OUTPUT.glob("*.ipynb"):
+        if old.stem not in {path.stem for path in tutorials}:
+            old.unlink()
+    if (TUTORIALS / "images").is_dir():
+        shutil.copytree(TUTORIALS / "images", OUTPUT / "images", dirs_exist_ok=True)
+    for path in tutorials:
         with tempfile.TemporaryDirectory() as tmp:
             exported = Path(tmp) / "notebook.ipynb"
             subprocess.run([sys.executable, "-m", "marimo", "export", "ipynb", str(path),

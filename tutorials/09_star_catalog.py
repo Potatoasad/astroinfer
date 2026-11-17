@@ -46,9 +46,9 @@ with app.setup:
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    # 8. The star catalog
+    # 9. The star catalog
 
-    In notebooks 6 and 7 the population likelihood went straight from the data $d_i$ to $\Lambda$,
+    In notebooks 7 and 8 the population likelihood went straight from the data $d_i$ to $\Lambda$,
     re-evaluating $\mathcal{L}(d_i\mid\theta)$ at every step. Real surveys rarely work that way. Parameter
     estimation is expensive, so it is run once per event, and the posteriors are stored and shared
     between many population analyses.
@@ -56,7 +56,7 @@ def _():
     `ai.Catalog` stores them. A catalog holds one `PosteriorData` per *event*, along with metadata.
     It exports the posteriors as an event-major *data product*, `{column: (E, N), "prior": (E, N)}`,
     and it saves itself to a folder and loads itself back. It can also carry compressed
-    *representations* of the posteriors, which are the subject of notebook 9.
+    *representations* of the posteriors, which are the subject of notebook 10.
 
     At the end of this notebook we rerun the survey's population inference using only the catalog,
     without simulating the telescope again.
@@ -66,10 +66,18 @@ def _():
 
 @app.cell(hide_code=True)
 def _():
+    mo.image(src=mo.notebook_dir() / "images" / "09_star_catalog.svg",
+             alt="A catalog in which every star holds a cloud of posterior samples",
+             width=640)
+    return
+
+
+@app.cell(hide_code=True)
+def _():
     mo.md(r"""
     ## The survey
 
-    The survey is the one from notebook 6. Stars have a luminosity and a distance, the telescope
+    The survey is the one from notebook 7. Stars have a luminosity and a distance, the telescope
     measures a noisy flux and a noisy parallax, and only stars with an observed
     $\log_{10}\hat F > -0.3$ are detected. The population is a truncated
     normal in $\log_{10}L$ and uniform-in-volume distances, $p(r)\propto r^2$.
@@ -167,7 +175,7 @@ def _():
     mo.md(r"""
     ## Building the catalog
 
-    `telescope.PE(d, priors, as_posterior=True)` returns a `PosteriorData` (notebook 3). It records
+    `telescope.PE(d, priors, as_posterior=True)` returns a `PosteriorData` (notebook 4). It records
     the PE prior density of every draw as `prior`, plus one `log_prior[...]` factor per parameter.
     The catalog uses both later on.
 
@@ -353,7 +361,7 @@ def _():
     ## Source keys
 
     `catalog.source_key(name)` is a SHA-256 hash of an event's posterior draws. If you replace a
-    posterior with `add_event(name, new_posterior, overwrite=True)`, its key changes. In notebook 9
+    posterior with `add_event(name, new_posterior, overwrite=True)`, its key changes. In notebook 10
     the catalog uses this key to tell when a compressed fit of an event is out of date.
 
     We try this on a copy loaded from disk, so that the catalog above is left as it is:
@@ -396,7 +404,7 @@ def _():
     $$
 
     The data product contains the arrays this needs: the draws, and `prior`, which is $\pi$. With
-    the selection term $-E\ln\alpha(\Lambda)$ from notebook 6 added (same injections, same
+    the selection term $-E\ln\alpha(\Lambda)$ from notebook 7 added (same injections, same
     estimator), the likelihood class below is about a dozen lines long. `ai.run_sampler` accepts any
     object that has a `.logpdf(Lambda)` method.
     """)
@@ -405,7 +413,7 @@ def _():
 
 @app.cell
 def _(pop_model, telescope, trigger):
-    # Injections for the selection term, as in notebook 6.
+    # Injections for the selection term, as in notebook 7.
     Lg = dict(mu_L=0.5, sigma_L=1.5)
     inj = pop_model.sample(Lg, key=jax.random.key(5), shape=(50000,))
     found = trigger.detect(telescope.sample(Star.from_dict(inj), key=6), np.random.default_rng(7))
@@ -490,7 +498,7 @@ def _(Lambda_true, hyper_naive, hyper_selected):
         mo.md(f"With selection: $\\mu_L$ = {hyper_selected.mu_L.median():.2f} "
               f"(90%: {hyper_selected.mu_L.quantile(0.05):.2f} to {hyper_selected.mu_L.quantile(0.95):.2f}), "
               f"$\\sigma_L$ = {hyper_selected.sigma_L.median():.2f}. Truth: 0 and 0.7. "
-              "Without the selection term, the bias towards bright stars from notebook 6 returns. "
+              "Without the selection term, the bias towards bright stars from notebook 7 returns. "
               "With 40 stars the corrected posterior is broad and stretched along a ridge, because "
               "we only see the bright tail, and a low $\\mu_L$ with a wide $\\sigma_L$ explains it "
               "almost as well."),
@@ -513,7 +521,7 @@ def _():
       $Z_i\propto\langle p(\theta\mid\Lambda)/\pi(\theta)\rangle_{\theta\sim p(\theta\mid d_i)}$, and
       `ai.run_sampler` runs any object with a `.logpdf(Lambda)` method.
 
-    Raw draws are one way to pass a posterior to a population analysis. In notebook 9 you write a
+    Raw draws are one way to pass a posterior to a population analysis. In notebook 10 you write a
     compressed representation of your own and add it to the catalog.
     """)
     return

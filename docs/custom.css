@@ -169,3 +169,7 @@ html.dark .logo-dark {
   height: 1.5rem;
   background: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 128 128%22%3E%3Cg fill=%22none%22 stroke=%22%23418FC5%22 stroke-width=%227%22%3E%3Cellipse cx=%2264%22 cy=%2264%22 rx=%2256%22 ry=%2229%22 transform=%22rotate%28-38 64 64%29%22/%3E%3Cellipse cx=%2264%22 cy=%2264%22 rx=%2234%22 ry=%2217%22 transform=%22rotate%28-38 64 64%29%22 opacity=%22.7%22/%3E%3C/g%3E%3Ccircle cx=%2264%22 cy=%2264%22 r=%2210%22 fill=%22%23E0A348%22/%3E%3C/svg%3E") no-repeat center / contain;
 }
+
+/* Landing page tabs: less side padding, so the diagram and its code have room. */
+.myst-tab-item-text { padding-left: 0.75rem; padding-right: 0.75rem; }
+.myst-tab-set-row .myst-tab-item-header-active { color: var(--ai-blue); border-bottom-color: var(--ai-blue); }

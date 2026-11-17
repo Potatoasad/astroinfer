@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 330" width="640" style="max-width:100%;height:auto" role="img" aria-label="A planet passes in front of its star; the star's light curve is flat with box-shaped dips of depth R_p over R_star squared, separated by the period P, the first at time T_0">
+<defs><marker id="n03-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#17243D"/></marker></defs>
+<rect x="0" y="0" width="640" height="330" rx="10" fill="#E8EDF3"/>
+<!-- star and orbit -->
+<ellipse cx="300" cy="80" rx="150" ry="24" fill="none" stroke="#8592a6" stroke-width="2" stroke-dasharray="6 5"/>
+<circle cx="300" cy="74" r="50" fill="#E0A348" stroke="#17243D" stroke-width="2"/>
+<path d="M 150 80 A 150 24 0 0 0 450 80" fill="none" stroke="#8592a6" stroke-width="2" stroke-dasharray="6 5"/>
+<circle cx="286" cy="103" r="10" fill="#17243D"/>
+<text x="168" y="40" font-family="Inter, system-ui, sans-serif" font-size="14" fill="#17243D" text-anchor="end">star</text>
+<line x1="174" y1="40" x2="248" y2="56" stroke="#8592a6" stroke-width="1.5"/>
+<text x="196" y="128" font-family="Inter, system-ui, sans-serif" font-size="14" fill="#17243D" text-anchor="end">planet</text>
+<line x1="200" y1="124" x2="274" y2="106" stroke="#8592a6" stroke-width="1.5"/>
+<!-- telescope -->
+<g stroke="#17243D" stroke-width="2" stroke-linejoin="round">
+  <path d="M 554 76 L 538 124 M 554 76 L 570 124 M 554 76 L 554 124" fill="none"/>
+  <polygon points="500,56 586,64 586,82 500,90" fill="#418FC5"/>
+  <rect x="494" y="52" width="10" height="42" rx="2" fill="#ffffff"/>
+  <rect x="586" y="66" width="14" height="14" rx="2" fill="#ffffff"/>
+</g>
+<path d="M 486 73 L 462 75" stroke="#8592a6" stroke-width="2" stroke-dasharray="3 4"/>
+<!-- light curve panel -->
+<rect x="20" y="150" width="600" height="164" rx="8" fill="#ffffff"/>
+<line x1="60" y1="282" x2="604" y2="282" stroke="#17243D" stroke-width="1.5" marker-end="url(#n03-arrow)"/>
+<line x1="60" y1="282" x2="60" y2="164" stroke="#17243D" stroke-width="1.5" marker-end="url(#n03-arrow)"/>
+<text x="68" y="174" font-family="Inter, system-ui, sans-serif" font-size="13" fill="#8592a6">flux</text>
+<text x="600" y="302" text-anchor="end" font-family="Inter, system-ui, sans-serif" font-size="13" fill="#8592a6">time</text>
+<path d="M 60 200 L 170 200 L 170 244 L 214 244 L 214 200 L 410 200 L 410 244 L 454 244 L 454 200 L 590 200" fill="none" stroke="#418FC5" stroke-width="2.5" stroke-linejoin="round"/>
+<!-- period -->
+<line x1="192" y1="190" x2="192" y2="174" stroke="#8592a6" stroke-width="1"/>
+<line x1="432" y1="190" x2="432" y2="174" stroke="#8592a6" stroke-width="1"/>
+<line x1="194" y1="182" x2="430" y2="182" stroke="#17243D" stroke-width="1.2" marker-start="url(#n03-arrow)" marker-end="url(#n03-arrow)"/>
+<rect x="300" y="170" width="24" height="22" fill="#ffffff"/>
+<text x="312" y="188" text-anchor="middle" font-family="KaTeX_Math, 'Times New Roman', serif" font-style="italic" font-size="20" fill="#17243D">P</text>
+<!-- T0 -->
+<line x1="192" y1="248" x2="192" y2="282" stroke="#8592a6" stroke-width="1" stroke-dasharray="3 3"/>
+<text x="184" y="304" font-family="KaTeX_Math, 'Times New Roman', serif" font-style="italic" font-size="20" fill="#17243D">T<tspan font-size="14" dy="5" font-style="normal" font-family="KaTeX_Main, 'Times New Roman', serif">0</tspan></text>
+<!-- depth -->
+<line x1="470" y1="202" x2="470" y2="242" stroke="#17243D" stroke-width="1.2" marker-start="url(#n03-arrow)" marker-end="url(#n03-arrow)"/>
+<text x="482" y="230" font-family="KaTeX_Main, 'Times New Roman', serif" font-size="19" fill="#17243D">(<tspan font-family="KaTeX_Math, 'Times New Roman', serif" font-style="italic">R</tspan><tspan font-family="KaTeX_Math, 'Times New Roman', serif" font-style="italic" font-size="13" dy="5">p</tspan><tspan dy="-5"> / </tspan><tspan font-family="KaTeX_Math, 'Times New Roman', serif" font-style="italic">R</tspan><tspan font-size="13" dy="5">*</tspan><tspan dy="-5">)</tspan><tspan font-size="13" dy="-9">2</tspan></text>
+</svg>
