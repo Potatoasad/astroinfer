@@ -412,3 +412,37 @@ def test_nested_sampling():
     assert run.sample_dims == ("draw",) and run.sites["p"].shape == (200, 2)
     post = infer(model, method="nested", seed=0, num_samples=200, summary=False)
     assert post.sample_dims == ("draw",) and isinstance(post.theta.p, Point)
+
+
+# ============================================================
+# Regressions found while writing the landing-page examples
+# ============================================================
+
+def test_infer_accepts_non_array_model_arguments_and_fixed_fields_in_plates():
+    import numpyro
+    import numpyro.distributions as ndist
+
+    from astroinfer import infer, parameter_dataclass
+    from astroinfer import sample as ai_sample
+
+    @parameter_dataclass
+    class Pt:
+        a: float
+        b: float
+
+    prior = Pt.distribution(a=ndist.Normal(0.0, 1.0), b=2.0)
+
+    class Scale:  # a plain object, not an array pytree
+        value = 0.5
+
+    def model(n, scale):
+        with numpyro.plate("items", n):
+            pt = ai_sample("pt", prior)
+            numpyro.sample("y", ndist.Normal(pt.a, scale.value), obs=jnp.zeros(n))
+
+    post = infer(model, 3, Scale(), seed=0, num_warmup=50, num_samples=50,
+                 summary=False, mcmc_kwargs={"progress_bar": False})
+    pt = post.theta.pt
+    assert pt.a.shape == (1, 50, 3)
+    assert pt.b.shape == (1, 50, 3)
+    np.testing.assert_allclose(pt.b, 2.0)

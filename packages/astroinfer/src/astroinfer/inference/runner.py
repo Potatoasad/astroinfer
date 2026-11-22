@@ -92,6 +92,41 @@ def _sample_shape(result):
     return ()
 
 
+def _is_array_tree(value):
+    """True if every leaf of ``value`` is a NumPy or JAX array.
+
+    Plain Python numbers count as static: they are often sizes (of a plate,
+    say), which must stay concrete inside the model.
+    """
+    return all(
+        isinstance(leaf, (jax.Array, np.ndarray, np.generic))
+        for leaf in jax.tree.leaves(value)
+    )
+
+
+def _bind_static(model, args, kwargs):
+    """Bind model arguments that are not arrays (e.g. a measurement object).
+
+    ``MCMC(jit_model_args=True)`` passes the model arguments through ``jit``,
+    which only accepts pytrees of arrays. Other arguments are bound into the
+    model instead, so they reach it unchanged.
+    """
+    static = {i: a for i, a in enumerate(args) if not _is_array_tree(a)}
+    static_kw = {k: v for k, v in kwargs.items() if not _is_array_tree(v)}
+    if not static and not static_kw:
+        return model, args, kwargs
+    n = len(args)
+
+    def bound(*dynamic, **dynamic_kw):
+        it = iter(dynamic)
+        full = [static[i] if i in static else next(it) for i in range(n)]
+        return model(*full, **dynamic_kw, **static_kw)
+
+    dynamic = tuple(a for i, a in enumerate(args) if i not in static)
+    dynamic_kw = {k: v for k, v in kwargs.items() if k not in static_kw}
+    return bound, dynamic, dynamic_kw
+
+
 def run_mcmc(
     model,
     *args,
@@ -123,6 +158,7 @@ def run_mcmc(
     """
     if method not in METHODS:
         raise ValueError(f"method must be one of {METHODS}, got {method!r}")
+    model, args, model_kwargs = _bind_static(model, args, model_kwargs)
     seed = _resolve_seed(seed)
     sampler_kwargs = dict(sampler_kwargs or {})
     _, rng_key = jax.random.split(jax.random.PRNGKey(seed))

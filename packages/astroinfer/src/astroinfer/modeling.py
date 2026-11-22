@@ -544,7 +544,12 @@ def _sample_structured(d, conds, obs, root, prefix, root_type):
     if obs is not None:
         return obs
     for path in d.fixed_paths():
-        numpyro.deterministic(f"{root}.{prefix}{path}", jnp.asarray(x[path]))
+        # Give fixed values the batch (and plate) axes of the random ones, so
+        # the object can be rebuilt from the sites.
+        v = jnp.asarray(x[path])
+        numpyro.deterministic(
+            f"{root}.{prefix}{path}", jnp.broadcast_to(v, lead + v.shape)
+        )
     return d.assemble(x)
 
 
