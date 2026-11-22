@@ -1,7 +1,7 @@
 """Posterior draws of typed parameters, plus their inference bookkeeping."""
 import hashlib
 import inspect
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field
 from html import escape
 from math import prod
 from typing import Any
@@ -194,9 +194,7 @@ class PosteriorData[P: Parameters](RichDisplay):
         if len(set(self.sample_dims)) != len(self.sample_dims):
             raise ValueError(f"Repeated sample dim in {self.sample_dims}")
 
-        parameter_names = {
-            f.name for f in fields(self.theta)
-        }
+        parameter_names = set(self.parameter_names) | set(self.theta.field_specs())
         stats_names = set(self.sample_stats)
         extra_names = set(self.extras)
 
@@ -257,21 +255,26 @@ class PosteriorData[P: Parameters](RichDisplay):
         return self.sample_dims + (OBSERVATION_DIM,)
 
     @property
+    def parameter_names(self) -> list[str]:
+        """Theta's array fields in order, nested ones by dotted path."""
+        return list(self.parameter_type.flat_field_specs())
+
+    @property
     def variable_names(self) -> list[str]:
         """Names usable as exported columns: theta fields, then extras."""
-        return [f.name for f in fields(self.theta)] + list(self.extras)
+        return self.parameter_names + list(self.extras)
 
     def variables(self, names) -> dict[str, Any]:
         """``{name: per-draw array}`` for theta fields, extras or sample_stats."""
-        theta = self.theta.broadcast()
+        theta = self.theta.broadcast().to_flat_dict()
         out = {}
         for name in names:
             if name in self.extras:
                 out[name] = self.extras[name]
             elif name in self.sample_stats:
                 out[name] = self.sample_stats[name]
-            elif name in {f.name for f in fields(theta)}:
-                out[name] = getattr(theta, name)
+            elif name in theta:
+                out[name] = theta[name]
             else:
                 raise KeyError(
                     f"{name!r} is not a parameter, extra or sample stat; "
@@ -293,7 +296,7 @@ class PosteriorData[P: Parameters](RichDisplay):
         and raises.
         """
         stats = self.sample_stats
-        physical = {f.name for f in fields(self.theta)}
+        physical = set(self.parameter_names)
         selected = set(columns) & physical
         extras = set(columns) - physical
 
@@ -353,12 +356,12 @@ class PosteriorData[P: Parameters](RichDisplay):
             f"{self.parameter_type.__qualname__}".encode()
         )
         groups = {
-            "theta": {f.name: getattr(self.theta, f.name) for f in fields(self.theta)},
+            "theta": self.theta.to_flat_dict(),
             "sample_stats": self.sample_stats,
             "extras": self.extras,
         }
         if self.local is not None:
-            groups["local"] = self.local.to_dict()
+            groups["local"] = self.local.to_flat_dict()
         # Numeric arrays are hashed at 64-bit width, so the same values give
         # the same hash whether JAX holds them as float32 or float64.
         canonical = {"f": "<f8", "i": "<i8", "u": "<u8", "b": "|b1", "c": "<c16"}
@@ -380,7 +383,7 @@ class PosteriorData[P: Parameters](RichDisplay):
     def __getitem__(self, key):
         # Access individual variables by name.
         if isinstance(key, str):
-            if key in {f.name for f in fields(self.theta)}:
+            if key in self.parameter_names or key in self.theta.field_specs():
                 return self.theta[key]
 
             if key in self.sample_stats:
@@ -496,10 +499,10 @@ class PosteriorData[P: Parameters](RichDisplay):
         chained = "chain" in self.sample_dims
 
         local_names = (
-            [f.name for f in fields(self.local)] if self.local is not None else []
+            list(type(self.local).flat_field_specs()) if self.local is not None else []
         )
         if var_names is None:
-            var_names = [f.name for f in fields(self.theta)]
+            var_names = self.parameter_names
             var_names += [f"local.{n}" for n in local_names]
 
         rows = []
@@ -507,7 +510,7 @@ class PosteriorData[P: Parameters](RichDisplay):
             if name.startswith("local."):
                 if self.local is None or name[6:] not in local_names:
                     raise KeyError(f"local has no field {name[6:]!r}")
-                values = getattr(self.local.broadcast(), name[6:])
+                values = self.local.broadcast()[name[6:]]
             else:
                 values = self.variables([name])[name]
             rows += _summary_rows(name, values, chained, prob, expand)
@@ -556,16 +559,14 @@ class PosteriorData[P: Parameters](RichDisplay):
 
         posterior, dims = {}, {}
 
-        theta = post.theta.broadcast()
-        for name, spec in post.parameter_type.field_specs().items():
-            value = np.asarray(getattr(theta, name))
+        for name, spec, value in post.theta.broadcast()._flat_items():
+            value = np.asarray(value)
             posterior[name] = value
             dims[name] = list(_core_dims(name, spec, value, 2))
 
         if post.local is not None:
-            local = post.local.broadcast()
-            for name, spec in type(local).field_specs().items():
-                value = np.asarray(getattr(local, name))
+            for name, spec, value in post.local.broadcast()._flat_items():
+                value = np.asarray(value)
                 posterior[f"local.{name}"] = value
                 dims[f"local.{name}"] = [OBSERVATION_DIM] + list(
                     _core_dims(name, spec, value, 3)
@@ -590,8 +591,8 @@ class PosteriorData[P: Parameters](RichDisplay):
         if isinstance(post.observed_data, Parameters):
             od = post.observed_data
             observed = {}
-            for name, spec in type(od).field_specs().items():
-                value = np.asarray(getattr(od, name))
+            for name, spec, value in od._flat_items():
+                value = np.asarray(value)
                 observed[name] = value
                 # ArviZ's dims apply to every group, so a name shared with
                 # a posterior variable keeps the posterior's dims and ArviZ
@@ -626,9 +627,7 @@ class PosteriorData[P: Parameters](RichDisplay):
 
         df = pd.DataFrame(df)
 
-        names = {
-            f.name for f in fields(parameter_type)
-        }
+        names = set(parameter_type.flat_field_specs())
 
         missing = names - set(df.columns)
         if missing:
@@ -682,10 +681,7 @@ class PosteriorData[P: Parameters](RichDisplay):
         theta = post.theta.broadcast()
 
         values = {
-            **{
-                f.name: getattr(theta, f.name)
-                for f in fields(theta)
-            },
+            **theta.to_flat_dict(),
             **post.sample_stats,
             **post.extras,
         }

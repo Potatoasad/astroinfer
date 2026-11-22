@@ -48,26 +48,35 @@ class LatentSpace(RichDisplay):
                                 "chi_eff": dist.Uniform(-1, 1)})
 
     ``supports`` overrides the declared support of the fields it names.
+    Fields of nested parameter types are named by dotted path
+    (``"masses.m1"``), and ``supports`` and ``transforms`` use those keys.
+    ``children`` holds the space of each nested field.
     """
 
     def __init__(self, parameter_type, supports=None):
         from numpyro.distributions.transforms import biject_to
 
-        names = [f.name for f in fields(parameter_type)]
+        specs = parameter_type.flat_field_specs()
         supports = dict(supports or {})
-        unknown = set(supports) - set(names)
+        unknown = set(supports) - set(specs)
         if unknown:
             raise KeyError(
                 f"{parameter_type.__name__} has no fields {sorted(unknown)}"
             )
 
-        specs = parameter_type.field_specs()
         self.parameter_type = parameter_type
         self.supports = {
-            k: _as_constraint(supports.get(k, specs[k].support), k)
-            for k in names
+            k: _as_constraint(supports.get(k, spec.support), k)
+            for k, spec in specs.items()
         }
         self.transforms = {k: biject_to(c) for k, c in self.supports.items()}
+        self.children = {
+            name: LatentSpace(child, {
+                k[len(name) + 1:]: c for k, c in self.supports.items()
+                if k.startswith(name + ".")
+            })
+            for name, child in parameter_type.nested_types().items()
+        }
 
     @staticmethod
     @cache
@@ -84,35 +93,39 @@ class LatentSpace(RichDisplay):
             )
         return obj
 
+    def _map(self, obj, inverse):
+        values = {}
+        for f in fields(self.parameter_type):
+            v = getattr(obj, f.name)
+            if f.name in self.children:
+                values[f.name] = self.children[f.name]._map(v, inverse)
+            else:
+                t = self.transforms[f.name]
+                values[f.name] = (t.inv if inverse else t)(jnp.asarray(v))
+        return self.parameter_type(**values)
+
     def from_parameter(self, d):
         """Physical point d -> latent point z (same type, real-valued)."""
-        d = self._coerce(d)
-        return self.parameter_type(**{
-            k: t.inv(jnp.asarray(getattr(d, k)))
-            for k, t in self.transforms.items()
-        })
+        return self._map(self._coerce(d), inverse=True)
 
     def to_parameter(self, z):
         """Latent point z -> physical point d inside the supports."""
-        z = self._coerce(z)
-        return self.parameter_type(**{
-            k: t(jnp.asarray(getattr(z, k)))
-            for k, t in self.transforms.items()
-        })
+        return self._map(self._coerce(z), inverse=False)
 
     def log_abs_det_jacobian(self, z):
         """log |d to_parameter(z) / dz|, summed over fields and core axes.
 
         Not needed for optimization; add it to a log density when sampling or
         when moving a density into latent space. Shape: z's batch shape.
+        Nested fields are included.
         """
         z = self._coerce(z)
-        specs = self.parameter_type.field_specs()
         total = 0.0
-        for k, t in self.transforms.items():
-            zk = jnp.asarray(getattr(z, k))
+        for k, spec, zk in z._flat_items():
+            t = self.transforms[k]
+            zk = jnp.asarray(zk)
             ladj = jnp.broadcast_to(t.log_abs_det_jacobian(zk, t(zk)), zk.shape)
-            n = len(specs[k].index)
+            n = len(spec.index)
             total = total + (ladj.sum(axis=tuple(range(-n, 0))) if n else ladj)
         return jnp.broadcast_to(total, z.batch_shape)
 
@@ -132,10 +145,12 @@ class LatentSpace(RichDisplay):
         return r"z = T^{-1}(" + root + r")\in\mathbb{R}^n"
 
     def _display_body(self):
-        specs = self.parameter_type.field_specs()
+        specs = self.parameter_type.flat_field_specs()
         rows = [
             [
-                inline_math(specs[k].latex or latex_name(k)),
+                inline_math(specs[k].latex or latex_name(k))
+                # Nested fields also show their path.
+                + (" <code>" + escape(k) + "</code>" if "." in k else ""),
                 "<code>" + escape(repr(c)) + "</code>",
                 "<code>" + escape(type(self.transforms[k]).__name__) + "</code>",
             ]

@@ -1,6 +1,4 @@
 """Convert measurement outputs (typed Parameters or dicts) to and from dicts of arrays."""
-from dataclasses import fields
-
 import numpy as np
 import pandas as pd
 
@@ -10,8 +8,7 @@ from ..parameters import Parameters
 def as_arrays(d) -> dict[str, np.ndarray]:
     """``{name: np.ndarray}`` from a Parameters object, dict or DataFrame."""
     if isinstance(d, Parameters):
-        b = d.broadcast()
-        return {f.name: np.asarray(getattr(b, f.name)) for f in fields(b)}
+        return {k: np.asarray(v) for k, v in d.broadcast().to_flat_dict().items()}
     if isinstance(d, pd.DataFrame):
         return {k: d[k].to_numpy() for k in d.columns}
     return {k: np.asarray(v) for k, v in dict(d).items()}

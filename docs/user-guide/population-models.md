@@ -367,5 +367,217 @@ r_slow = volume_slow.sample({}, key=jax.random.key(8), shape=(100_000,))["distan
 float(jnp.abs(r - r_slow).max())
 ```
 
+## Population models as conditional distributions
+
+`PopulationLikelihood` wraps a `GenerativeModel` in a `PopulationModel`, which you can also make
+yourself with `ai.PopulationModel.from_generative(model, parameter_type)`. A `PopulationModel` is
+a conditional distribution with $\theta$ as the output and $\Lambda$ as the condition (see
+[Distributions over parameter types](distributions.md)). Its `sample` returns parameter objects
+and takes the number of draws as `N=`, like every other conditional distribution, while
+`GenerativeModel.sample` returns a dict and keeps `shape=`:
+
+```{code-cell} python
+source_population = ai.PopulationModel.from_generative(population, Source)
+source_population.sample(Lambda, key=0, N=3)
+```
+
+`PopulationModel.sample` still accepts `shape=`, with a `DeprecationWarning`.
+
+## Converting a structured distribution
+
+A [structured distribution](distributions.md#structured-distributions) describes a population
+field by field, with NumPyro distributions. It draws through NumPyro, and astroinfer does not treat
+those draws as differentiable in $\Lambda$. `prior.as_generative(hyperparameter_type=None,
+external=(), conditioned_on=None)` converts it to the generative backend of this page. The result
+is a `StructuredGenerativePopulation`, a `PopulationModel` whose draws are made from seeds by
+inverse transform sampling, as for a `GenerativeModel`, and are therefore differentiable in
+$\Lambda$. This is the population above written as a structured distribution, with a type for its
+hyperparameters:
+
+```{code-cell} python
+import numpyro.distributions as dist
+from numpyro.distributions import constraints
+
+@parameter_dataclass(name="Flux hyperparameters", latex=r"\Lambda")
+class FluxHyper:
+    mu: float = parameter(latex=r"\mu")
+    sigma: float = parameter(latex=r"\sigma")
+
+source_prior = Source.distribution(
+    x=dist.Uniform(-1.0, 1.0),
+    flux=lambda L: dist.TruncatedNormal(L.mu, L.sigma, low=0.0, high=20.0),
+).given(FluxHyper)
+converted = source_prior.as_generative()
+converted
+```
+
+Each random field becomes one generative variable, named by its path, in the distribution's draw
+order, and `model` is the underlying `GenerativeModel`:
+
+```{code-cell} python
+converted.order, type(converted.model).__name__
+```
+
+The hyperparameter type comes from `.given`; pass `hyperparameter_type=` for a distribution that
+has none.
+
+These parts of a structured distribution convert:
+
+- a field given a NumPyro distribution, a function of the conditions, or `ai.conditional(fn,
+  on=...)`, provided the distribution is scalar and continuous. The paths in `on` become the
+  variables the leaf reads, so `GenerativeModel` checks the order as usual;
+- nested fields, whose fields keep their dotted paths;
+- fixed fields, which are not variables and are inserted into every draw;
+- a mixture of structured distributions that draw the same random fields and fix the same values,
+  as the whole distribution or as a nested field. It becomes a `generative.WeightedMixture`, which
+  draws no component label, like `mixture` above.
+
+Fields with core axes, discrete distributions, and nested fields given any other conditional
+distribution do not convert. `external=` and `conditioned_on=` work as for `GenerativeModel` (see
+[External variables](#external-variables)); a population with external variables has no `logpdf`.
+
+### Seeds and gradients
+
+`make_seeds(key, N)` returns the seeds, one array of uniform numbers per variable.
+`sample(Lambda, seeds=seeds)` draws from them and returns parameter objects, with fixed fields
+broadcast to the sample shape; `sample(Lambda, key=key, N=N)` makes the seeds from `key`. The same
+seeds and the same $\Lambda$ give the same draws. Given the same seeds, the converted population
+draws the same sources as the hand-built `population` from [Several variables](#several-variables):
+
+```{code-cell} python
+seeds = converted.make_seeds(0, 5000)
+converted_draws = converted.sample(Lambda, seeds=seeds)
+hand_built = population.sample(Lambda, seeds=seeds)
+float(jnp.max(jnp.abs(converted_draws.flux - hand_built["flux"])))
+```
+
+The largest difference is of order $10^{-14}$, from two implementations of the truncated normal
+quantile. A dict $\Lambda$ is converted to `FluxHyper`. The draws are differentiable in $\Lambda$,
+so common random numbers work as before; the mean flux moves almost one-for-one with $\mu$:
+
+```{code-cell} python
+def converted_mean_flux(mu):
+    return converted.sample(FluxHyper(mu=mu, sigma=1.0), seeds=seeds).flux.mean()
+
+jax.grad(converted_mean_flux)(3.0)
+```
+
+`logpdf` is `GenerativeModel.log_prob` of the converted model, and agrees with the structured
+distribution's own `logpdf`:
+
+```{code-cell} python
+float(jnp.max(jnp.abs(converted.logpdf(converted_draws, Lambda)
+                      - source_prior.logpdf(converted_draws, Lambda))))
+```
+
+### How each field is drawn
+
+A field is drawn with NumPyro's closed-form inverse CDF when astroinfer can differentiate it. The
+list is Uniform, Normal, LogNormal, Exponential, Cauchy and Logistic, and the truncations of
+Normal, Cauchy and Logistic, such as TruncatedNormal. Every other distribution, including Beta and
+Gamma, is drawn by bisection on its CDF, which is slower (see
+[Differentiating through samples](#differentiating-through-samples)) and needs finite bounds. The
+bounds come from the distribution's support when it is a fixed interval, as for Beta. For a field
+given a function or `ai.conditional`, they are intersected with the field's declared
+`parameter(support=...)`; a field given a NumPyro distribution directly uses only the
+distribution's own support.
+
+`as_generative` checks every field before it converts any, and raises one error that lists each
+path that cannot be converted and the reason:
+
+```{code-cell} python
+:tags: [raises-exception]
+
+@parameter_dataclass
+class Galaxy:
+    flux: float = parameter()
+    n_stars: int = parameter()
+    spectrum: float = parameter(index=("channel",))
+
+Galaxy.distribution(
+    flux=lambda L: dist.Gamma(L.mu, L.sigma),
+    n_stars=dist.Poisson(100.0),
+    spectrum=dist.Normal(jnp.zeros(3), 1.0).to_event(1),
+).given(FluxHyper).as_generative()
+```
+
+The Gamma distribution has no listed inverse CDF and an unbounded support. Declaring a bounded
+support for the field, which is given a function here, gives bisection its bounds:
+
+```{code-cell} python
+@parameter_dataclass
+class BoundedFlux:
+    flux: float = parameter(support=constraints.interval(0.0, 50.0))
+
+gamma_population = BoundedFlux.distribution(
+    flux=lambda L: dist.Gamma(L.mu, L.sigma)
+).given(FluxHyper).as_generative()
+float(gamma_population.sample(Lambda, key=0, N=5000).flux.mean())
+```
+
+The mean of 3.0 is that of a Gamma distribution with shape 3 and rate 1. The declared support
+should hold nearly all of the distribution's mass, because bisection inside a narrower interval
+truncates the draws without renormalizing them.
+
+A Beta field is drawn by bisection on $[0, 1]$. As for the `Beta` leaf above, JAX cannot
+differentiate the incomplete beta function with respect to the shape parameters, so a Beta field
+whose shape parameters depend on $\Lambda$ has no gradient in $\Lambda$:
+
+```{code-cell} python
+:tags: [raises-exception]
+
+beta_population = Source.distribution(
+    x=dist.Uniform(-1.0, 1.0), flux=lambda L: dist.Beta(L.mu, L.sigma)
+).given(FluxHyper).as_generative()
+jax.grad(lambda mu: beta_population.sample(FluxHyper(mu=mu, sigma=2.0), seeds=seeds).flux.mean())(3.0)
+```
+
+### Mixtures
+
+The two-group population of [Mixtures](#mixtures), written with structured components, converts
+to a `WeightedMixture`. Each component needs `.given` when its fields read the conditions, and the
+components need a common `support=` because the support of a function field is not known before
+it is called:
+
+```{code-cell} python
+@parameter_dataclass(name="Two-group hyperparameters", latex=r"\Lambda")
+class GroupHyper:
+    mu: float
+    sigma: float
+    f_faint: float
+
+faint = Source.distribution(x=dist.Uniform(-1.0, 1.0),
+                            flux=dist.TruncatedNormal(1.0, 0.2, low=0.0, high=20.0))
+bright = Source.distribution(
+    x=dist.Uniform(-1.0, 1.0),
+    flux=lambda L: dist.TruncatedNormal(L.mu, L.sigma, low=0.0, high=20.0),
+).given(GroupHyper)
+two_group_prior = ai.mixture(
+    [faint, bright],
+    weights=lambda L: jnp.stack([L.f_faint, 1.0 - L.f_faint]),
+    parameter_type=GroupHyper,
+    support={"flux": constraints.interval(0.0, 20.0)},
+)
+two_group_population = two_group_prior.as_generative()
+type(two_group_population.model.root).__name__
+```
+
+No component label is drawn, so the draws are smooth in the weights. As for `two_groups` above,
+the derivative of the mean flux with respect to $f_\mathrm{faint}$ is close to $-2$:
+
+```{code-cell} python
+group_seeds = two_group_population.make_seeds(1, 20_000)
+
+def group_mean_flux(f_faint):
+    L = GroupHyper(mu=3.0, sigma=1.0, f_faint=f_faint)
+    return two_group_population.sample(L, seeds=group_seeds).flux.mean()
+
+jax.grad(group_mean_flux)(0.3)
+```
+
+A mixture is drawn by bisection on its CDF, so every field of the components needs finite bounds.
+Inside a structured distribution, the weights of a mixture field may also read a field drawn
+before it; [Sharp bits](../sharp-bits.md) explains how the converted population fills it in.
+
 For more, see [Population inference](population-inference.md), which uses these models, and
 tutorial [05](https://github.com/Potatoasad/astroinfer/blob/main/tutorials/05_coin_mint.py).

@@ -712,6 +712,422 @@ ax2.legend();
 
 ::::::
 
+::::::{tab-item} Selection effects
+
+```{code-cell} python
+:tags: [remove-cell]
+
+run_snippet("star_population")
+run_snippet("star_selection")
+```
+
+The stars of the Star population tab are now seen by a survey that catalogs a star only when its
+measured flux is above a limit. Faint stars far away never reach the catalog, so the catalog is
+brighter than the population it came from. To infer $\Lambda=(\mu_L,\sigma_L)$ from it, the
+model needs one more step after the data, the probability that a measurement is detected:
+
+:::::{div}
+:class: rail
+
+::::{div}
+:class: rail-gut
+
+:::{div}
+:class: dag-node dag-theta
+
+$\Lambda$
+:::
+
+:::{div}
+:class: rail-stem rail-arrow
+:::
+
+::::
+
+::::{div}
+:class: rail-body
+
+:::{div}
+:class: rail-label
+
+Hyperparameters $\Lambda$
+:::
+
+The mean $\mu_L$ and width $\sigma_L$ of the distribution of $\log_{10}L$.
+
+::::
+
+::::{div}
+:class: rail-gut
+
+:::{div}
+:class: rail-stem
+:::
+
+:::{div}
+:class: dag-process
+
+$\pi(\theta\mid\Lambda)$
+:::
+
+:::{div}
+:class: rail-stem rail-arrow
+:::
+
+::::
+
+::::{div}
+:class: rail-body
+
+:::{div}
+:class: rail-label
+
+Population model $\pi(\theta\mid\Lambda)$
+:::
+
+$\log_{10}L$ follows a normal distribution truncated to $[-3, 5]$, and the distance is uniform
+between 0.5 and 2 kpc. This is the `population` of the Star population tab.
+
+::::
+
+::::{div}
+:class: rail-gut
+
+:::{div}
+:class: rail-stem
+:::
+
+:::{div}
+:class: dag-node
+
+$\theta$
+:::
+
+:::{div}
+:class: rail-stem rail-arrow
+:::
+
+::::
+
+::::{div}
+:class: rail-body
+
+:::{div}
+:class: rail-label
+
+Parameters $\theta$
+:::
+
+Each star has a log luminosity and a distance, held in a `Star`.
+
+::::
+
+::::{div}
+:class: rail-gut
+
+:::{div}
+:class: rail-stem
+:::
+
+:::{div}
+:class: dag-process
+
+$\mathcal{L}(d\mid\theta)$
+:::
+
+:::{div}
+:class: rail-stem rail-arrow
+:::
+
+::::
+
+::::{div}
+:class: rail-body
+
+:::{div}
+:class: rail-label
+
+Measurement process $\mathcal{L}(d\mid\theta)$
+:::
+
+The `Telescope` measures the log flux $\log_{10}L - 2\log_{10}r$ and the parallax $1/r$ with
+Gaussian noise.
+
+::::
+
+::::{div}
+:class: rail-gut
+
+:::{div}
+:class: rail-stem
+:::
+
+:::{div}
+:class: dag-node
+
+$d$
+:::
+
+:::{div}
+:class: rail-stem rail-arrow
+:::
+
+::::
+
+::::{div}
+:class: rail-body
+
+:::{div}
+:class: rail-label
+
+Data $d$
+:::
+
+The measured log flux and parallax of one star, held in a `StarObservation`.
+
+::::
+
+::::{div}
+:class: rail-gut
+
+:::{div}
+:class: rail-stem
+:::
+
+:::{div}
+:class: dag-process
+
+$P(\mathrm{det}\mid d)$
+:::
+
+:::{div}
+:class: rail-stem rail-arrow
+:::
+
+::::
+
+::::{div}
+:class: rail-body
+
+:::{div}
+:class: rail-label
+
+Detection trigger $P(\mathrm{det}\mid d)$
+:::
+
+The survey catalogs a star when its measured log flux is above $-0.3$. The trigger reads the
+data, not $\theta$, so noise can push a star over the limit or under it. `ThresholdTrigger` is
+the built-in hard cut on one field of the data.
+
+```{literalinclude} snippets/star_selection.py
+:start-after: --- trigger
+:end-before: --- likelihood
+:language: python
+```
+
+::::
+
+::::{div}
+:class: rail-gut
+
+:::{div}
+:class: rail-stem
+:::
+
+:::{div}
+:class: dag-node
+
+$\{d_i\}$
+:::
+
+::::
+
+::::{div}
+:class: rail-body
+
+:::{div}
+:class: rail-label
+
+Catalog $\{d_i\}$
+:::
+
+The measurements of the $E$ detected stars. The others are never recorded.
+
+::::
+
+:::::
+
+We draw 1000 stars from the population with $\mu_L = 0$ and $\sigma_L = 0.7$, observe each one
+and ask the trigger which are detected. `trigger.detect` returns a boolean mask, which indexes
+the batch of observations:
+
+```{code-cell} python
+Lambda_true = {"mu_L": 0.0, "sigma_L": 0.7}
+draws = population.sample(Lambda_true, key=jax.random.key(0), shape=(1000,))
+stars = Star.from_dict(draws)
+
+telescope = Telescope(sigma_log_flux=0.2, sigma_parallax=0.3)
+observed = telescope.sample(stars, key=1)
+detected = trigger.detect(observed, np.random.default_rng(2))
+data = observed[detected]
+data
+```
+
+The catalog holds 588 of the 1000 stars. Below the line, where the true flux is under the limit,
+the survey detects only the few stars that noise pushed over it:
+
+```{code-cell} python
+r_grid = jnp.linspace(0.5, 2.0, 100)
+
+fig, ax = plt.subplots(figsize=(6, 3.2), layout="constrained")
+ax.scatter(stars.distance[~detected], stars.log_L[~detected], s=6,
+           color="#C9D2DE", label="missed")
+ax.scatter(stars.distance[detected], stars.log_L[detected], s=6,
+           color="#418FC5", label="detected")
+ax.plot(r_grid, -0.3 + 2 * jnp.log10(r_grid), color="#17243D",
+        label="flux limit")
+ax.set(xlabel="distance $r$ [kpc]", ylabel=r"$\log_{10}L$",
+       title="True luminosity and distance of 1000 stars")
+ax.legend(loc="lower right");
+```
+
+Analysing the catalog as if it held every star, as in the Star population tab, gives the
+population of the detected stars:
+
+```{code-cell} python
+hyper_priors = {"mu_L": dist.Uniform(-2, 2), "sigma_L": dist.Uniform(0.1, 2)}
+naive = telescope.population_inference(data, population, hyper_priors, N=2000,
+                                       seed=0, num_warmup=500,
+                                       num_samples=1000, summary=False)
+naive.summary()
+```
+
+It gives $\mu_L = 0.49 \pm 0.02$ and $\sigma_L = 0.46 \pm 0.02$, far from the true values of 0
+and 0.7. Each factor of the likelihood is the evidence $Z_i(\Lambda)$ of one star, but the
+catalog only holds detected stars, so each factor has to be divided by the probability
+$\alpha(\Lambda)$ that a star drawn from the population is detected:
+
+$$
+\mathcal L(\Lambda)=\prod_{i=1}^{E}\frac{Z_i(\Lambda)}{\alpha(\Lambda)},
+\qquad
+\alpha(\Lambda)=\iint P(\mathrm{det}\mid d)\,\mathcal{L}(d\mid\theta)\,\pi(\theta\mid\Lambda)
+\,\mathrm{d}d\,\mathrm{d}\theta .
+$$
+
+We estimate $\alpha(\Lambda)$ with *injections*: draws $\theta_j$ from a broad, fixed
+distribution $g(\theta)$, each simulated once through the telescope and the trigger. Reweighting
+the detected ones gives
+
+$$
+\hat\alpha(\Lambda)=\frac{1}{N_\mathrm{inj}}\sum_{j\in\mathrm{found}}
+\frac{\pi(\theta_j\mid\Lambda)}{g(\theta_j)} .
+$$
+
+Here $g$ is the population with a brighter mean and a larger width. `trigger.injections` takes a
+DataFrame of draws, with $g(\theta_j)$ in a `prior` column, and adds the simulated data and
+whether each draw was detected:
+
+```{code-cell} python
+Lambda_g = {"mu_L": 0.5, "sigma_L": 1.5}
+g_draws = population.sample(Lambda_g, key=jax.random.key(3), shape=(50_000,))
+draw_table = pd.DataFrame({k: np.asarray(v) for k, v in g_draws.items()})
+draw_table["prior"] = np.exp(np.asarray(population.log_prob(g_draws, Lambda_g)))
+
+injections = trigger.injections(telescope, draw_table, np.random.default_rng(4))
+int(injections["detected"].sum())
+```
+
+The selection term goes in a subclass of `PopulationLikelihood`. It keeps the found injections
+and overrides `logpdf` to subtract $E\log\hat\alpha(\Lambda)$ from the sum of the
+$\log\hat Z_i(\Lambda)$:
+
+:::{div}
+:class: landing-code
+
+```{literalinclude} snippets/star_selection.py
+:start-after: --- likelihood
+:end-before: --- end
+:language: python
+```
+:::
+
+`population_inference` builds the likelihood from the class passed as `likelihood_cls`, and
+`functools.partial` binds the injections to it:
+
+```{code-cell} python
+corrected = telescope.population_inference(
+    data, population, hyper_priors, N=2000, seed=0, num_warmup=500,
+    num_samples=1000, summary=False,
+    likelihood_cls=partial(SelectedLikelihood, injections=injections))
+corrected.summary()
+```
+
+The corrected posterior gives $\mu_L = -0.09 \pm 0.10$ and $\sigma_L = 0.76 \pm 0.05$, within
+about one standard deviation of the true values. On the left are the posterior samples of
+$\Lambda$ from both analyses. On the right, each line is the population distribution
+$\pi(\log_{10}L\mid\Lambda)$ for one of 50 posterior samples, over the true population:
+
+```{code-cell} python
+grid = jnp.linspace(-3, 3, 200)
+
+def population_pdfs(posterior, n=50):
+    hyper = posterior.stack_samples().to_dataframe().sample(n, random_state=0)
+    mu = hyper["mu_L"].to_numpy()[:, None]
+    sigma = hyper["sigma_L"].to_numpy()[:, None]
+    return jnp.exp(dist.TruncatedNormal(mu, sigma, low=-3.0, high=5.0)
+                   .log_prob(grid))
+
+true_pdf = jnp.exp(dist.TruncatedNormal(0.0, 0.7, low=-3.0, high=5.0)
+                   .log_prob(grid))
+analyses = [("without selection term", naive, "#8592a6"),
+            ("with selection term", corrected, "#418FC5")]
+
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(8, 3.2), layout="constrained")
+for label, posterior, color in analyses:
+    samples = posterior.stack_samples().to_dataframe()
+    ax1.scatter(samples["mu_L"], samples["sigma_L"], s=2, alpha=0.2,
+                color=color)
+    ax2.plot(grid, population_pdfs(posterior).T, color=color, alpha=0.15)
+    ax2.plot([], [], color=color, label=label)
+ax1.plot(Lambda_true["mu_L"], Lambda_true["sigma_L"], "x", ms=10, mew=2,
+         color="#E0A348")
+ax1.set(xlabel=r"$\mu_L$", ylabel=r"$\sigma_L$",
+        title=r"Posterior samples of $\Lambda$")
+ax2.plot(grid, true_pdf, color="#E0A348", lw=2, ls="--",
+         label="true population")
+ax2.set(xlabel=r"$\log_{10}L$", ylabel="density",
+        title="Inferred and true populations")
+ax2.legend(fontsize=8);
+```
+
+The corrected curves agree on the bright side, where the survey sees most stars, and spread
+out on the faint side, which the catalog constrains only through the stars it did not detect.
+[Example 7](examples/07_flux_limited_survey.ipynb) works through this survey in more detail.
+
+:::{dropdown} Definitions from the Star population tab
+```{literalinclude} snippets/star_population.py
+:start-after: --- population
+:end-before: --- end
+:language: python
+```
+:::
+
+:::{dropdown} Imports for this example
+```{literalinclude} snippets/star_population.py
+:start-after: --- imports
+:end-before: --- population
+:language: python
+```
+
+```{literalinclude} snippets/star_selection.py
+:start-after: --- imports
+:end-before: --- trigger
+:language: python
+```
+:::
+
+::::::
+
 ::::::{tab-item} Template
 
 ```{code-cell} python

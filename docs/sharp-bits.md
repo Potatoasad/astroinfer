@@ -173,13 +173,77 @@ four = camera.sample(Source(x=jnp.zeros(4), flux=1.0), key=0)
 camera.logpdf(four, sources)
 ```
 
-`logpdf` broadcasts the batch shapes of the data and the parameters against each other, as NumPy
-does, and `(4,)` and `(3,)` do not broadcast. To evaluate every source against every measurement,
+`logpdf` broadcasts the batch shapes of the data and the parameters against each other. When both
+have the same number of batch axes this is NumPy broadcasting, and `(4,)` and `(3,)` do not
+broadcast. To evaluate every source against every measurement,
 pass `outer=True`. The parameter axes come first in the result:
 
 ```{code-cell} python
 camera.logpdf(four, sources, outer=True).shape
 ```
+
+## A condition with fewer batch axes lines up with the leading data axes
+
+Four draws for each of three sources have batch shape `(3, 4)`, and evaluate against the sources
+directly:
+
+```{code-cell} python
+four_each = camera.sample(sources, key=0, N=4)
+camera.logpdf(four_each, sources).shape
+```
+
+The same data with the axes swapped, batch shape `(4, 3)`, fail against the same sources, although
+NumPy would broadcast `(4, 3)` with `(3,)`:
+
+```{code-cell} python
+:tags: [raises-exception]
+
+swapped = Measurement(x_hat=four_each.x_hat.T, flux_hat=four_each.flux_hat.T)
+camera.logpdf(swapped, sources)
+```
+
+When the parameters have fewer batch axes than the data, astroinfer pads them with trailing
+length-1 axes, so that they line up with the leading data axes. NumPy pads with leading axes
+instead. The leading rule matches the layout of `sample`, which puts the sample axes `N` after
+the batch axes of the parameters, so `logpdf(sample(theta, N=n), theta)` always lines up. Every
+conditional distribution follows it, including population models and the distributions in
+[Distributions over parameter types](user-guide/distributions.md). To pair the last data axis with
+the sources, broadcast the sources to the full batch shape yourself:
+
+```{code-cell} python
+camera.logpdf(swapped, sources.broadcast((4, 3))).shape
+```
+
+## Only parameter objects are batched
+
+A mixture whose weights depend on a fraction `f_faint` takes the fraction as a condition. Passing
+one fraction per source as a plain array fails:
+
+```{code-cell} python
+:tags: [raises-exception]
+
+faint = Source.distribution(x=dist.Uniform(-1.0, 1.0), flux=dist.TruncatedNormal(1.0, 0.2, low=0.0))
+bright = Source.distribution(x=dist.Uniform(-1.0, 1.0), flux=dist.TruncatedNormal(3.0, 1.0, low=0.0))
+groups = ai.mixture([faint, bright], weights=lambda f_faint: jnp.stack([f_faint, 1.0 - f_faint]))
+groups.sample(key=0, f_faint=jnp.array([0.1, 0.5, 0.9]))
+```
+
+`sample` and `logpdf` batch only the arguments that are parameter objects (or dicts and
+DataFrames given for an argument declared with a parameter type). A number, a plain array or an
+untyped dict reaches every single call whole. Here the weight function received all three
+fractions for one source and returned weights of shape `(2, 3)`. Wrap per-object values in a
+parameter type to batch them:
+
+```{code-cell} python
+@parameter_dataclass
+class Fraction:
+    f_faint: float = parameter()
+
+groups = ai.mixture([faint, bright], weights=lambda frac: jnp.stack([frac.f_faint, 1.0 - frac.f_faint]))
+groups.sample(key=0, frac=Fraction(f_faint=jnp.array([0.1, 0.5, 0.9]))).batch_shape
+```
+
+A value shared by every object, such as a single number, needs no wrapping.
 
 ## Population models check the order of their variables
 
@@ -208,6 +272,87 @@ The model is built once and checked then, so these mistakes raise immediately in
 wrong draws inside a sampler. Put `x` first, or declare it with `external=` and pass its values
 with `conditioned_on=` when sampling.
 
+## Fixed fields of a structured distribution are not random
+
+A structured distribution with a field given as a value gives $-\infty$ to any object whose field
+differs from that value, even by a little:
+
+```{code-cell} python
+on_axis = Source.distribution(x=0.0, flux=dist.Uniform(0.0, 10.0))
+on_axis.logpdf(Source(x=jnp.array([0.0, 0.01]), flux=3.0))
+```
+
+A field given a value is a fixed field. It is neither drawn nor given a density, and
+`logpdf` checks it against the declared value with a relative tolerance of $10^{-6}$. A field
+left out of `distribution(...)` that has a default in the dataclass is fixed at its default, which
+is easy to miss:
+
+```{code-cell} python
+@parameter_dataclass
+class Star:
+    flux: float = parameter()
+    distance: float = parameter(default=10.0)
+
+Star.distribution(flux=dist.Uniform(0.0, 10.0)).fixed_paths()
+```
+
+Give the field a distribution to make it random.
+
+## NumPyro distributions for fields with core axes need `.to_event`
+
+A field with a core axis of four channels rejects a NumPyro distribution with four parameters:
+
+```{code-cell} python
+:tags: [raises-exception]
+
+@parameter_dataclass
+class Spectrum:
+    flux: float = parameter(index=("channel",))
+
+Spectrum.distribution(flux=dist.LogNormal(jnp.zeros(4), 1.0))
+```
+
+`dist.LogNormal(jnp.zeros(4), 1.0)` has batch shape `(4,)`: it is four independent distributions,
+and its `log_prob` returns four values. A structured distribution needs one scalar log density
+per field value, so a field with $k$ core axes needs a distribution with an empty batch shape and
+$k$ event dimensions. `.to_event(1)` turns the batch axis into an event axis:
+
+```{code-cell} python
+spectra = Spectrum.distribution(flux=dist.LogNormal(jnp.zeros(4), 1.0).to_event(1))
+spectra.sample(key=0, N=3).flux.shape
+```
+
+## A mixture picks one component for the whole object
+
+Two groups of sources, one faint on the left and one bright on the right, mixed with equal
+weights:
+
+```{code-cell} python
+left_faint = Source.distribution(x=dist.Normal(-0.5, 0.2), flux=dist.Normal(1.0, 0.2))
+right_bright = Source.distribution(x=dist.Normal(0.5, 0.2), flux=dist.Normal(3.0, 0.5))
+two_groups = ai.mixture([left_faint, right_bright], weights=jnp.array([0.5, 0.5]))
+drawn = two_groups.sample(key=0, N=10_000)
+float(jnp.corrcoef(drawn.x, drawn.flux)[0, 1])
+```
+
+Within each component, `x` and `flux` are independent, but in the mixture their correlation
+coefficient is 0.87. `ai.mixture` draws one component label per object and takes every field of
+that object from the same component, so a mixture of products is not a product of mixtures. When
+each field should be mixed on its own, put a NumPyro mixture on the field instead:
+
+```{code-cell} python
+field_by_field = Source.distribution(
+    x=dist.MixtureSameFamily(dist.Categorical(probs=jnp.array([0.5, 0.5])),
+                             dist.Normal(jnp.array([-0.5, 0.5]), 0.2)),
+    flux=dist.MixtureSameFamily(dist.Categorical(probs=jnp.array([0.5, 0.5])),
+                                dist.Normal(jnp.array([1.0, 3.0]), jnp.array([0.2, 0.5]))),
+)
+drawn = field_by_field.sample(key=0, N=10_000)
+float(jnp.corrcoef(drawn.x, drawn.flux)[0, 1])
+```
+
+The correlation is now close to zero, $-0.008$. The label is not a variable of the mixture: `logpdf` sums over it with `logsumexp`.
+
 ## Leaves without a closed-form quantile are slow
 
 Every draw from a population model is a uniform number pushed through the inverse CDF of a leaf.
@@ -235,6 +380,166 @@ f"closed form: {closed:.1f} ms, bisection: {bisection:.1f} ms"
 The draws are still differentiable in the hyperparameters. Prefer leaves with a closed-form
 quantile in code that runs many times, such as a population likelihood. A leaf you write yourself
 can provide one through `cond_ppf`.
+
+## `as_generative` needs a closed-form quantile or finite bounds
+
+A structured distribution whose flux follows a Gamma distribution with a shape hyperparameter `k`
+cannot be converted to the generative backend:
+
+```{code-cell} python
+:tags: [raises-exception]
+
+from typing import Any
+
+from numpyro.distributions import constraints
+
+gamma_flux = Source.distribution(
+    x=dist.Uniform(-1.0, 1.0), flux=lambda L: dist.Gamma(L["k"], 1.0)
+).given(Any)
+gamma_flux.as_generative()
+```
+
+`as_generative` draws each field by pushing a uniform number through the inverse of its CDF. It
+uses NumPyro's closed-form `icdf` for a short list of distributions (Uniform, Normal, LogNormal,
+Exponential, Cauchy, Logistic and the truncations of Normal, Cauchy and Logistic) and bisection on
+the CDF for the rest. Bisection needs a finite interval, and the support of a Gamma distribution
+is unbounded. Declare a bounded support on the field that holds nearly all of the distribution's
+mass, or use a distribution from the list. The declared support is used for fields given a
+function or `ai.conditional`; for a field given a NumPyro distribution directly, only the
+distribution's own support counts:
+
+```{code-cell} python
+@parameter_dataclass
+class BoundedSource:
+    x: float = parameter()
+    flux: float = parameter(support=constraints.interval(0.0, 50.0))
+
+converted = BoundedSource.distribution(
+    x=dist.Uniform(-1.0, 1.0), flux=lambda L: dist.Gamma(L["k"], 1.0)
+).given(Any).as_generative()
+float(converted.sample({"k": 3.0}, key=0, N=10_000).flux.mean())
+```
+
+The mean is 3.0, that of a Gamma distribution with shape 3 and rate 1. Bisection inside an interval that cuts off part
+of the distribution truncates the draws without renormalizing them.
+
+## A converted Beta field has no gradient in its shape parameters
+
+A Beta field converts, but differentiating its draws with respect to a hyperparameter that sets
+its shape fails:
+
+```{code-cell} python
+:tags: [raises-exception]
+
+spin_like = Source.distribution(
+    x=dist.Uniform(-1.0, 1.0), flux=lambda L: dist.Beta(L["a"], 2.0)
+).given(Any).as_generative()
+seeds = spin_like.make_seeds(0, 1000)
+jax.grad(lambda a: spin_like.sample({"a": a}, seeds=seeds).flux.mean())(3.0)
+```
+
+A Beta field is drawn by bisection on its CDF, the regularized incomplete beta function, and the
+gradient of the draw with respect to $\Lambda$ needs the derivative of that function with respect
+to its shape parameters, which JAX does not provide. The `Beta` leaf of `astroinfer.generative`
+has the same limitation. Fixed shape parameters are fine. When $\Lambda$ must set the shape, use a
+distribution with a closed-form quantile, such as a `TruncatedNormal` on $[0, 1]$, or pass the
+unconverted distribution to `PopulationLikelihood` with a proposal, which needs only its `logpdf`.
+
+## Mixture weights in `as_generative` may read a field drawn earlier
+
+A mixture field whose weights depend on another field of the same object names that field as a
+condition. Here the fraction of bright sources rises with the position, but sampling the
+structured distribution fails:
+
+```{code-cell} python
+:tags: [raises-exception]
+
+@parameter_dataclass
+class Position:
+    x: float = parameter()
+
+@parameter_dataclass
+class Brightness:
+    flux: float = parameter()
+
+@parameter_dataclass
+class Located:
+    position: Position
+    brightness: Brightness
+
+def bright_fraction(position, hyper):
+    w = jax.nn.sigmoid(position.x / hyper["width"])
+    return jnp.stack([1.0 - w, w])
+
+located_prior = Located.distribution(
+    position=Position.distribution(x=dist.Uniform(-1.0, 1.0)),
+    brightness=ai.mixture(
+        [Brightness.distribution(flux=dist.Uniform(0.0, 2.0)),
+         Brightness.distribution(flux=dist.Uniform(2.0, 6.0))],
+        weights=bright_fraction,
+        support={"flux": constraints.interval(0.0, 6.0)},
+    ),
+)
+located_prior.sample(key=0, N=3, hyper={"width": 0.2})
+```
+
+The structured distribution is conditioned on `position` and `hyper`, the arguments of the weight
+function. Its own `sample` and `logpdf` treat both as conditions you supply, and a `position`
+passed this way is not the position drawn for the same object. `as_generative` instead fills a
+condition whose name is a top-level field with the value drawn for that field, and passes
+$\Lambda$ as the other condition:
+
+```{code-cell} python
+located = located_prior.as_generative()
+draws = located.sample({"width": 0.2}, key=0, N=10_000)
+right, left = draws.position.x > 0.5, draws.position.x < -0.5
+float(draws.brightness.flux[right].mean()), float(draws.brightness.flux[left].mean())
+```
+
+Sources on the right have a mean flux of 4.0 and sources on the left 1.1. The density of the
+converted population is the native one with the drawn field passed as the condition:
+
+```{code-cell} python
+L = {"width": 0.2}
+float(jnp.max(jnp.abs(located.logpdf(draws, L)
+                      - located_prior.logpdf(draws, position=draws.position, hyper=L))))
+```
+
+The field must come before the mixture in the draw order. With the mixture first, the conversion
+fails:
+
+```{code-cell} python
+:tags: [raises-exception]
+
+located_prior.with_order(["brightness", "position.x"]).as_generative()
+```
+
+## `ai.infer` traces the model's arguments
+
+A model that sets the size of a plate from an integer argument fails under `ai.infer`:
+
+```{code-cell} python
+:tags: [raises-exception]
+
+import numpyro
+
+def model(num_events):
+    with numpyro.plate("events", num_events):
+        ai.sample("x", dist.Normal(0.0, 1.0))
+
+ai.infer(model, 3, seed=0, num_warmup=100, num_samples=100, summary=False)
+```
+
+`ai.infer` runs NumPyro's `MCMC` with `jit_model_args=True`, the default of gravpop's sampler, so
+every model argument is traced by `jax.jit`, and a traced integer cannot set a shape. Take sizes
+from the shapes of array arguments, as in the [spin mixture](user-guide/numpyro-models.md#a-mass-dependent-spin-mixture),
+or turn the tracing off; the model is then compiled again for every new argument value:
+
+```{code-cell} python
+post = ai.infer(model, 3, seed=0, num_warmup=100, num_samples=100, summary=False,
+                mcmc_kwargs={"jit_model_args": False})
+post.theta.x.shape
+```
 
 ## A small `N` biases the population likelihood low
 

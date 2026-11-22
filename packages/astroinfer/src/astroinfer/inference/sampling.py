@@ -7,14 +7,14 @@ Every entry point builds a ``PosteriorData`` straight from the sampler's
 arrays. NUTS draws keep their chains, ``sample_dims=("chain", "draw")``;
 nested-sampling draws have ``sample_dims=("draw",)``.
 """
-from dataclasses import fields
 from typing import Any
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 
-from ..parameters import coerce, parameter, parameter_dataclass
+from ..display import latex_name
+from ..parameters import Parameters, coerce, parameter, parameter_dataclass
 from ..population import as_population_model
 from ..posterior import PosteriorData, _is_sample_stat
 from .likelihoods import (
@@ -22,17 +22,12 @@ from .likelihoods import (
     JointPopulationLikelihood,
     PopulationLikelihood,
 )
+from .runner import _resolve_seed
 
 # gravpop site names of the per-observation parameters in joint inference.
 LOCAL_PREFIX = "theta."
 # numpyro scope for the internal sites of prior blocks used as local priors.
 _BLOCK_SCOPE = "_local"
-
-
-def _resolve_seed(seed) -> int:
-    if isinstance(seed, (int, np.integer)):
-        return int(seed)
-    return int(np.random.default_rng(seed).integers(2**30))
 
 
 def _prior_variables(key, prior) -> tuple[str, ...]:
@@ -91,20 +86,61 @@ def _sampler_arrays(sampler):
     return sampler.get_samples(), sampler.get_sample_stats(), ("draw",)
 
 
-def _type_from_arrays(type_name, values, n_batch, *, latex=None):
-    """A parameter dataclass with one field per array in ``values``.
+def _type_from_arrays(type_name, values, n_batch, *, latex=None, dims=None):
+    """A parameter dataclass with one field per entry of ``values``.
 
-    Axes after the first ``n_batch`` become core axes named
-    ``<field>_dim_<i>``.
+    An array becomes an array field whose axes after the first ``n_batch``
+    are core axes, named by ``dims[name]`` if given and ``<field>_dim_<i>``
+    otherwise. A ``Parameters`` instance becomes a nested field of its type.
     """
+    dims = dims or {}
     namespace = {"__annotations__": {}, "__module__": __name__}
     for name, value in values.items():
+        if isinstance(value, Parameters):
+            namespace["__annotations__"][name] = type(value)
+            continue
         extra = np.ndim(value) - n_batch
+        index = dims.get(name, tuple(f"{name}_dim_{i}" for i in range(extra)))
+        if len(index) != extra:
+            raise ValueError(f"{name}: {extra} core axes but dims {index}")
+        namespace["__annotations__"][name] = Any
+        namespace[name] = parameter(index=tuple(index))
+    return parameter_dataclass(type(type_name, (), namespace), latex=latex)
+
+
+def _with_leading_axes(cls, axes, latex_axes=None):
+    """``cls`` with the named core axes ``axes`` put before every field's own.
+
+    Used for typed objects that carry axes beyond the sample axes (plates,
+    batched conditions) inside a posterior. Returns ``cls`` when ``axes`` is
+    empty; otherwise a type built at run time with the same name, fields,
+    LaTeX and supports.
+    """
+    axes = tuple(axes)
+    if not axes:
+        return cls
+    symbols = tuple(latex_axes or (latex_name(a) for a in axes))
+    nested = cls.nested_types()
+    namespace = {"__annotations__": {}, "__module__": __name__, "__doc__": cls.__doc__}
+    for name, spec in cls.field_specs().items():
+        if name in nested:
+            namespace["__annotations__"][name] = _with_leading_axes(
+                nested[name], axes, symbols
+            )
+            continue
         namespace["__annotations__"][name] = Any
         namespace[name] = parameter(
-            index=tuple(f"{name}_dim_{i}" for i in range(extra))
+            name=spec.name,
+            latex=spec.latex,
+            index=axes + spec.index,
+            index_latex=symbols + spec.index_latex if spec.index_latex else (),
+            support=spec.support,
         )
-    return parameter_dataclass(type(type_name, (), namespace), latex=latex)
+    return parameter_dataclass(
+        type(cls.__name__, (), namespace),
+        name=cls._display_name,
+        latex=cls._latex,
+    )
 
 
 def _hyperparameter_posterior(
@@ -133,7 +169,7 @@ def _hyperparameter_posterior(
             len(sample_dims),
             latex=r"\Lambda",
         )
-    names = [f.name for f in fields(cls)]
+    names = list(cls.flat_field_specs())
     missing = [k for k in names if k not in others]
     if missing:
         raise KeyError(
@@ -375,7 +411,7 @@ def _hyperprior_point(pop_priors, seed, num=201):
 
 
 def _core_shape(parameter_type, name, template):
-    n = len(parameter_type.field_specs()[name].index)
+    n = len(parameter_type.flat_field_specs()[name].index)
     if not n:
         return ()
     if template is None:
@@ -383,7 +419,7 @@ def _core_shape(parameter_type, name, template):
             f"{parameter_type.__name__}.{name} has core axes; their lengths "
             "come from init, so pass init= a Proposal or a typed theta."
         )
-    return tuple(np.shape(getattr(template, name))[-n:])
+    return tuple(np.shape(template[name])[-n:])
 
 
 def _local_prior_block(local_priors, factors, num_obs):
@@ -437,7 +473,7 @@ def _feasible_start(theta, Lambda, data, measurement, population, supports,
             measurement.logpdf(data, theta) + population.logpdf(theta, Lambda)
         )
         for name, support in supports.items():
-            inside = jnp.asarray(support.check(jnp.asarray(getattr(theta, name))))
+            inside = jnp.asarray(support.check(jnp.asarray(theta[name])))
             ok &= inside.reshape(num_obs, -1).all(axis=1)
         return np.asarray(ok)
 
@@ -561,7 +597,7 @@ def joint_population_inference(
     if clash:
         raise ValueError(f"Hyperprior names may not start with {LOCAL_PREFIX!r}: {clash}")
 
-    field_names = [f.name for f in fields(parameter_type)]
+    field_names = list(parameter_type.flat_field_specs())
 
     # ---------------------------------------------- starting point of theta_i
     key = jax.random.key(seed)
@@ -634,7 +670,7 @@ def joint_population_inference(
             redraw=init if isinstance(init, Proposal) else None, key=key,
         )
         values = {
-            LOCAL_PREFIX + k: jnp.asarray(getattr(theta0, k)) for k in site_supports
+            LOCAL_PREFIX + k: jnp.asarray(theta0[k]) for k in site_supports
         }
         # Lambda starts where theta_i was drawn, for hyperpriors that are
         # plain distributions (sites of prior blocks keep the default).

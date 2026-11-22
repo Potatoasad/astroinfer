@@ -37,6 +37,8 @@ project:
         - file: user-guide/terminology.md
         - file: user-guide/parameters.md
         - file: user-guide/measurement-processes.md
+        - file: user-guide/distributions.md
+        - file: user-guide/numpyro-models.md
         - file: user-guide/population-models.md
         - file: user-guide/population-inference.md
         - file: user-guide/catalogs.md

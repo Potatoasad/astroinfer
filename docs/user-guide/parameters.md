@@ -402,3 +402,117 @@ ai.LatentSpace(Disk, {"y": constraints.positive})
 ```
 
 For an optimisation in the latent space, see [the lighthouse tutorial](https://github.com/Potatoasad/astroinfer/blob/main/tutorials/02_lighthouse.py).
+
+## Nested parameter types
+
+A field annotated with another parameter type is a *nested field*, and a type with nested fields
+is a *nested parameter type*. A nested field holds one object of its own type:
+
+```{code-cell} python
+@parameter_dataclass(name="Position", latex=r"\mathbf{r}")
+class Position:
+    x: float = parameter(name="x [arcsec]", latex="x")
+    y: float = parameter(name="y [arcsec]", latex="y")
+
+@parameter_dataclass(name="Star", latex=r"\theta")
+class Star:
+    position: Position = parameter(name="Sky position")
+    flux: float = parameter(name="Flux", latex="f", support=constraints.positive)
+
+star = Star(position=Position(x=0.1, y=-0.2), flux=3.0)
+star
+```
+
+The display shows the nested field as a section of its own, titled with the `name` given to
+`parameter`. A nested field may set `name` and `latex`, but not `index` or `support`, which belong
+to the fields of the nested type:
+
+```{code-cell} python
+:tags: [raises-exception]
+
+@parameter_dataclass
+class BadStar:
+    position: Position = parameter(support=constraints.positive)
+```
+
+The annotation may also be a string, such as `position: "Position"`, for a type defined later in
+the module.
+
+`parameters` lists the fields of the outer type only. `nested_types()` maps each nested field to
+its type, and `flat_field_specs()` gives the `ParameterSpec` of every array field, with nested
+fields named by their *path*, the field names joined by dots:
+
+```{code-cell} python
+Star.parameters, Star.nested_types(), list(Star.flat_field_specs())
+```
+
+### Batching and indexing
+
+Batch axes are shared by every array field in the tree, and broadcast as for a flat type. Here the
+position is a single point and the flux has three values:
+
+```{code-cell} python
+stars = Star(position=Position(x=0.0, y=0.0), flux=jnp.array([1.0, 2.0, 3.0]))
+stars.batch_shape, stars.position.batch_shape, stars.broadcast().position.x.shape
+```
+
+The outer object has batch shape `(3,)`, while the nested position, stored as given, has batch
+shape `()` until `broadcast()` gives it the full shape. Named core axes also share one namespace
+across the tree, so two fields that use the same axis name must agree on its length.
+
+Integer, slice and array indices select from the batch of every field in the tree. A string may
+be a path, which reaches into nested fields; the name of a nested field returns the nested object:
+
+```{code-cell} python
+stars[1:].batch_shape, stars["position.x"], type(stars["position"]).__name__
+```
+
+Arithmetic, `copy()` and the JAX transformations act on every array field in the tree. The
+gradient of a function of a `Star` is a `Star` with a `Position` inside:
+
+```{code-cell} python
+jax.grad(lambda s: s.flux * jnp.exp(-s.position.x**2 - s.position.y**2))(star)
+```
+
+### Dicts and tables
+
+`to_dict()` returns nested dicts, and `to_flat_dict()` returns one entry per path:
+
+```{code-cell} python
+star.to_dict()
+```
+
+```{code-cell} python
+star.to_flat_dict()
+```
+
+`from_dict` accepts either form. A nested field may be given as a nested dict, as an object of its
+type, or as keys with dotted paths, so a DataFrame with a `position.x` column converts directly:
+
+```{code-cell} python
+star_table = pd.DataFrame({"position.x": [0.1, 0.4], "position.y": [0.0, 0.2], "flux": [1.0, 2.0]})
+Star.from_dict(star_table)
+```
+
+The same paths name the columns of tables of draws. `PosteriorData.to_dataframe()`, `summary()`,
+`to_arviz()` and catalog files use `position.x` and `position.y`, and
+`PosteriorData.from_dataframe` reads them back. The columns of a posterior over `Star`:
+
+```{code-cell} python
+ai.PosteriorData(theta=Star(position=Position(x=jnp.zeros(4), y=jnp.ones(4)),
+                            flux=jnp.linspace(1.0, 2.0, 4))).to_dataframe().columns.tolist()
+```
+
+### Latent spaces
+
+A `LatentSpace` of a nested type maps every array field by its own support. Overrides are keyed by
+path:
+
+```{code-cell} python
+star_space = ai.LatentSpace(Star, {"position.x": dist.Uniform(-1.0, 1.0)})
+star_space.supports
+```
+
+`children` holds the latent space of each nested field, and `log_abs_det_jacobian` sums over the
+whole tree. To build distributions over nested types field by field, see
+[Distributions over parameter types](distributions.md#nested-fields).

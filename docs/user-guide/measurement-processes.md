@@ -105,6 +105,12 @@ available methods.
 camera.parameter_names
 ```
 
+`MeasurementProcess` is a subclass of `ConditionalDistribution`, the base class of every
+distribution over parameter types in astroinfer, with $d$ as the output and $\theta$ as the
+condition. Batching, keys, `.condition` and the display come from that class, and
+`MeasurementProcess` adds parameter estimation, population inference and posterior predictive
+draws. [Distributions over parameter types](distributions.md) describes the base class.
+
 ## Simulating data
 
 `sample(theta)` calls `sample_single` once for every element of the batch of `theta`, with a
@@ -161,7 +167,8 @@ float(camera.sample(src, key=7).x_hat), float(camera.sample(src, key=7).x_hat)
 ## Evaluating the likelihood
 
 `logpdf(d, theta)` returns $\log \mathcal{L}(d\mid\theta)$. The batch shapes of `d` and `theta` broadcast
-against each other, so one measurement against three sources gives three values:
+against each other (with the rule for unequal numbers of batch axes described below), so one
+measurement against three sources gives three values:
 
 ```{code-cell} python
 camera.logpdf(d, src), camera.logpdf(d, sources)
@@ -173,6 +180,15 @@ With equal batch shapes, element $i$ of `d` is paired with element $i$ of `theta
 three_measurements = camera.sample(sources, key=2)
 camera.logpdf(three_measurements, sources)
 ```
+
+When `d` has more batch axes than `theta`, the axes of `theta` line up with the leading axes of
+`d`. Data drawn with `N=` can therefore be evaluated against the parameters they were drawn from:
+
+```{code-cell} python
+camera.logpdf(camera.sample(sources, key=4, N=5), sources).shape
+```
+
+Row $i$ of the `(3, 5)` result holds the five draws for source $i$.
 
 With `outer=True`, every element of `theta` is evaluated against every element of `d`. The axes
 of `theta` come first in the result:
