@@ -101,7 +101,7 @@ $$
 |---|---|
 | `measurement` | the `MeasurementProcess`; its `logpdf` gives $\mathcal{L}(d_i\mid\theta_{ij})$ |
 | `data` | all measurements, one object of the measurement's `data_type` with batch shape `(E,)` |
-| `pop_model` | a `GenerativeModel` that draws every field of the measurement's `parameter_type` |
+| `pop_model` | a `GenerativeModel` that draws every field of the measurement's `parameter_type`, or a `PopulationModel` or other conditional distribution over that type (see [Structured populations](#structured-populations)) |
 | `N` | the number of Monte Carlo draws per source (default 2000) |
 | `seed` | the seed of the fixed uniform numbers behind the draws (default 42) |
 | `conditioned_on` | values of external variables of `pop_model`, if it has any |
@@ -491,3 +491,59 @@ A `PopulationModel` can define `derived_parameters_single(theta, Lambda)`, for e
 probability that a source belongs to each component of a mixture. Joint inference evaluates it
 for every draw and source and stores the result in `extras`, next to the measurement's derived
 parameters.
+
+## Structured populations
+
+`pop_model` may also be a [structured distribution](distributions.md#structured-distributions)
+over the measurement's parameter type. This is the population above, field by field, with a type
+for its hyperparameters:
+
+```{code-cell} python
+@parameter_dataclass(name="Flux hyperparameters", latex=r"\Lambda")
+class FluxHyper:
+    mu: float = parameter(latex=r"\mu")
+    sigma: float = parameter(latex=r"\sigma")
+
+source_prior = Source.distribution(
+    x=dist.Uniform(-1.0, 1.0),
+    flux=lambda L: dist.TruncatedNormal(L.mu, L.sigma, low=0.0, high=20.0),
+).given(FluxHyper)
+```
+
+Converted with `as_generative` (see
+[Converting a structured distribution](population-models.md#converting-a-structured-distribution)),
+it draws from seeds like a `GenerativeModel` and needs no proposal. Its draws for a given `seed`
+are those of the hand-built `population`, so the two likelihoods agree:
+
+```{code-cell} python
+converted = ai.PopulationLikelihood(camera, data[:200], source_prior.as_generative(), N=500, seed=0)
+float(converted.logpdf(Lambda_true)), float(likelihood.logpdf(Lambda_true))
+```
+
+Both are $-441.72$.
+
+Passed as it is, the structured distribution is wrapped in a `DistributionPopulation`, a
+`PopulationModel` that calls the distribution's own `sample` and `logpdf`. Its draws are not
+treated as differentiable in $\Lambda$, so `PopulationLikelihood` refuses to run without a
+proposal:
+
+```{code-cell} python
+:tags: [raises-exception]
+
+ai.PopulationLikelihood(camera, data[:200], source_prior, N=500, seed=0)
+```
+
+With a proposal, only the population's `logpdf` is needed:
+
+```{code-cell} python
+wrapped = ai.PopulationLikelihood(camera, data[:200], source_prior, N=100, seed=0,
+                                  proposal=CameraProposal(camera))
+float(wrapped.logpdf(Lambda_true)), float(with_proposal.logpdf(Lambda_true))
+```
+
+The result, $-440.31$, is the same as with the hand-built population and the same proposal.
+
+The same holds for any other conditional distribution over the parameter type with one condition
+or none: it is wrapped, and needs a proposal unless it implements the `Reparameterizable` protocol
+of `astroinfer.distributions.transport`, as converted populations do. `joint_population_inference`
+uses only the population's `logpdf`, so it accepts a structured distribution in either form.

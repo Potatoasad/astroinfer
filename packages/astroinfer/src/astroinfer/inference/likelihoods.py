@@ -12,7 +12,6 @@ importance sampling instead:
                                 / q_Lambda(theta_ij | d_i),
     theta_ij ~ q_Lambda(. | d_i)
 """
-from dataclasses import fields
 
 import jax
 import jax.numpy as jnp
@@ -145,7 +144,7 @@ class PopulationLikelihood:
     def population_draws(self, Lambda):
         """theta_ij ~ p(theta | Lambda) from the fixed key, batch (E, N)."""
         theta = self.population.sample(
-            Lambda, key=self.key, shape=(self.E, self.N)
+            Lambda, key=self.key, N=(self.E, self.N)
         )
 
         if theta.batch_shape != (self.E, self.N):
@@ -250,7 +249,8 @@ class JointPopulationLikelihood:
     log of prod_i L(d_i | theta_i) p(theta_i | Lambda), for joint sampling.
 
     gravpop passes one dict holding the hyperparameters and, under names
-    ``prefix + field``, each field of the theta_i with batch shape (E,).
+    ``prefix + field``, each field of the theta_i with batch shape (E,)
+    (nested fields by dotted path, ``prefix + "masses.m1"``).
     Together with the hyperprior this is the joint posterior
     p(Lambda, {theta_i} | {d_i}).
     """
@@ -261,7 +261,7 @@ class JointPopulationLikelihood:
         self.data = coerce(data, measurement.data_type)
         self.parameter_type = measurement.parameter_type
         self.prefix = prefix
-        self.field_names = [f.name for f in fields(self.parameter_type)]
+        self.field_names = list(self.parameter_type.flat_field_specs())
 
     def split(self, x):
         """``(Lambda dict, theta_i)`` from gravpop's variable dict."""

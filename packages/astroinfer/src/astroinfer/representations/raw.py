@@ -10,7 +10,7 @@ catalog's raw representation is what saves its posteriors.
 """
 import warnings
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -93,7 +93,7 @@ class RawFit(BaseFit):
     def save(self, directory: Path) -> None:
         p = self.posterior
         groups = {
-            "theta": {f.name: getattr(p.theta, f.name) for f in fields(p.theta)},
+            "theta": p.theta.to_flat_dict(),
             "sample_stats": dict(p.sample_stats),
             "extras": dict(p.extras),
         }
@@ -101,7 +101,7 @@ class RawFit(BaseFit):
         observed = None
         if isinstance(p.observed_data, Parameters):
             od = p.observed_data
-            groups["observed_data"] = {f.name: getattr(od, f.name) for f in fields(od)}
+            groups["observed_data"] = od.to_flat_dict()
             observed = {"format": "parameters", "type": type_path(type(od))}
         elif p.observed_data is not None:
             try:

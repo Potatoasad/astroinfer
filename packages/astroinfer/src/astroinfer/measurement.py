@@ -1,43 +1,32 @@
 """The measurement model L(d | theta).
 
 Users subclass ``MeasurementProcess`` and write the *unbatched* physics:
-``sample_single(theta, key)`` and ``logpdf_single(d, theta)``. The base class
-vmaps them over arbitrary batch shapes, owns a JAX key (``self.key``) that
-``sample(theta)`` advances on every call, and exposes
+``sample_single(theta, key)`` and ``logpdf_single(d, theta)``. Batching,
+keys and the display come from
+:class:`~astroinfer.distributions.ConditionalDistribution`; this module adds
 parameter estimation / population inference as convenience methods
 (implemented in :mod:`astroinfer.inference`).
 """
-from dataclasses import dataclass, field, fields
-from functools import partial
-from html import escape
-from math import prod
+from dataclasses import dataclass
 from typing import Any, ClassVar
 
 import jax
 import numpy as np
 import pandas as pd
 
-from .display import RichDisplay, details_open, inline_math, kv_table, math_block
+from .distributions import ConditionalDistribution
+from .distributions.base import _vmapped
+from .distributions.schema import or_untyped
 from .inference.sampling import (
     joint_population_inference,
     parameter_estimation,
     population_inference,
 )
-from .parameters import coerce
-
-
-def _vmapped(fn, batch_shape):
-    for _ in batch_shape:
-        fn = jax.vmap(fn)
-    return fn
-
-
-def _default_key():
-    return jax.random.key(0)
+from .parameters import Parameters, coerce
 
 
 @dataclass(eq=False)
-class MeasurementProcess(RichDisplay):
+class MeasurementProcess(ConditionalDistribution):
     """
     Measurement model L(d | theta).
 
@@ -60,19 +49,23 @@ class MeasurementProcess(RichDisplay):
     key and leaves ``self.key`` untouched.
     """
 
-    key: Any = field(
-        default_factory=_default_key, kw_only=True, repr=False, compare=False
-    )
-
     parameters = ()
-    parameter_type = None
-    data_type = None
+
+    density_latex = r"\mathcal{L}"
+    _output_symbol = "d"
 
     sampler_kwargs: ClassVar[dict[str, Any]] = {
         "num_warmup": 500,
         "num_samples": 8_000,
         "summary": False,
     }
+
+    # A measurement always has a theta and a d, typed or not.
+    def _output_type(self):
+        return or_untyped(self.data_type)
+
+    def _condition_type(self):
+        return or_untyped(self.parameter_type)
 
     # ========================================================
     # Parameter metadata and conversion
@@ -86,47 +79,15 @@ class MeasurementProcess(RichDisplay):
         if self.parameter_type is None:
             return ()
 
-        return tuple(
-            f.name for f in fields(self.parameter_type)
-        )
+        # Dotted paths for nested types, e.g. "masses.m1".
+        return tuple(self.parameter_type.flat_field_specs())
 
     _coerce = staticmethod(coerce)
     _vmapped = staticmethod(_vmapped)
 
     # ========================================================
-    # Scalar physics methods: implemented by user
+    # Batched API
     # ========================================================
-
-    def sample_single(self, theta, key):
-        raise NotImplementedError
-
-    def logpdf_single(self, d, theta):
-        raise NotImplementedError
-
-    # ========================================================
-    # Public sampling API
-    # ========================================================
-
-    def seed(self, seed: int):
-        """Reset the internal key to ``jax.random.key(seed)``."""
-        self.key = jax.random.key(int(seed))
-
-    def _next_key(self):
-        """Split the internal key: store one half, return the other."""
-        # Subclasses with their own __init__ may skip the dataclass one.
-        if "key" not in self.__dict__:
-            self.key = _default_key()
-        self.key, sub = jax.random.split(self.key)
-        return sub
-
-    def _resolve_key(self, key):
-        if key is None:
-            return self._next_key()
-        if isinstance(key, np.random.Generator):
-            return jax.random.key(int(key.integers(0, 2**31)))
-        if isinstance(key, (int, np.integer)):
-            return jax.random.key(int(key))
-        return key
 
     def sample(self, theta, key=None, *, N=None, **context):
         """
@@ -134,8 +95,8 @@ class MeasurementProcess(RichDisplay):
 
         **context:
             Extra keyword arguments forwarded unchanged to every
-            ``sample_single`` call (not batched), e.g. ``Lambda`` for a
-            Proposal. Plain measurement processes take none.
+            ``sample_single`` call (not batched). Plain measurement
+            processes take none.
 
         key:
             None (default): use the internal key, ``self.key``, and advance it,
@@ -147,47 +108,11 @@ class MeasurementProcess(RichDisplay):
             One observation per theta.
             Output batch_shape = theta.batch_shape.
 
-        If N is provided:
+        If N is provided (an int or a tuple of ints):
             N independent observations per theta.
-            Output batch_shape = theta.batch_shape + (N,).
+            Output batch_shape = theta.batch_shape + N.
         """
-        rng = self._resolve_key(key)
-
-        # --------------------------------------------------
-        # Parameter batching
-        # --------------------------------------------------
-        theta = coerce(theta, self.parameter_type).broadcast()
-
-        if N is not None:
-            if not isinstance(N, (int, np.integer)) or N < 1:
-                raise ValueError("N must be a positive integer")
-
-            shape = theta.batch_shape
-
-            # Add a new singleton batch axis.
-            theta = theta.reshape_batch(shape + (1,))
-
-            # Broadcast across N independent realizations.
-            theta = theta.broadcast(shape + (int(N),))
-
-        # --------------------------------------------------
-        # Draw independent observations
-        # --------------------------------------------------
-        shape = theta.batch_shape
-        single = partial(self.sample_single, **context)
-
-        if not shape:
-            return single(theta, rng)
-
-        keys = jax.random.split(
-            rng, prod(shape)
-        ).reshape(shape + rng.shape)
-
-        return _vmapped(single, shape)(theta, keys)
-
-    # ========================================================
-    # Public likelihood API
-    # ========================================================
+        return super().sample(theta, key, N=N, **context)
 
     def logpdf(self, d, theta, *, outer=False, **context):
         """
@@ -197,68 +122,23 @@ class MeasurementProcess(RichDisplay):
 
         Accepts parameter objects or parameter dictionaries.
 
-        Default: broadcast parameter and data batch shapes.
+        Default: broadcast parameter and data batch shapes; a theta with
+        fewer batch axes than d lines up with the leading axes of d.
         outer=True: evaluate every parameter-data combination.
         """
-        d = coerce(d, self.data_type)
-        theta = coerce(theta, self.parameter_type)
-
-        if not (
-            hasattr(d, "batch_shape")
-            and hasattr(theta, "batch_shape")
-        ):
+        # Untyped d or theta would reach every logpdf_single whole, giving a
+        # wrongly shaped result, so require parameter types as before.
+        d, theta = coerce(d, self.data_type), coerce(theta, self.parameter_type)
+        if not (isinstance(d, Parameters) and isinstance(theta, Parameters)):
             raise TypeError(
                 "Expected parameter_dataclass objects "
                 "or dictionaries convertible to them"
             )
-
-        if outer:
-            ts = theta.batch_shape
-            ds = d.batch_shape
-
-            theta = theta.reshape_batch(
-                ts + (1,) * len(ds)
-            )
-            d = d.reshape_batch(
-                (1,) * len(ts) + ds
-            )
-
-        shape = np.broadcast_shapes(
-            d.batch_shape,
-            theta.batch_shape,
-        )
-
-        d = d.broadcast(shape)
-        theta = theta.broadcast(shape)
-
-        return _vmapped(
-            partial(self.logpdf_single, **context), shape
-        )(d, theta)
+        return super().logpdf(d, theta, outer=outer, **context)
 
     # ========================================================
     # Truths, injections, and derived parameters
     # ========================================================
-
-    def derived_parameters_single(self, theta):
-        """Quantities computed from one (unbatched) theta; none by default."""
-        return {}
-
-    def derived_parameters(self, theta):
-        """
-        ``{name: array}`` of derived quantities, with theta's batch shape.
-
-        By default this vmaps ``derived_parameters_single`` over every batch
-        axis of theta. Override it instead when your code is already
-        batched; it receives a typed theta (``theta["x"]`` and ``theta.x``
-        both work).
-        """
-        if (
-            type(self).derived_parameters_single
-            is MeasurementProcess.derived_parameters_single
-        ):
-            return {}
-        theta = coerce(theta, self.parameter_type).broadcast()
-        return _vmapped(self.derived_parameters_single, theta.batch_shape)(theta)
 
     def check(self, df):
         out = pd.DataFrame(df).reset_index(drop=True).copy()
@@ -371,22 +251,12 @@ class MeasurementProcess(RichDisplay):
     # Rich notebook display
     # ========================================================
 
-    def _display_equations(self) -> list[str]:
-        """LaTeX lines describing L(d | theta), shown under "Model"."""
-        return []
-
-    def _display_config(self) -> dict:
-        """``{name: value}`` shown under "Configuration"."""
-        return {}
-
-    def _display_density(self, theta_tex, data_tex) -> str:
-        """LaTeX symbol for the density, shown in the summary line."""
-        return (
-            r"\mathcal{L}\!\left(" + data_tex + r"\mid " + theta_tex + r"\right)"
-        )
-
     def _display_methods(self, theta_tex, data_tex) -> list[tuple[str, str, str]]:
         """``(name, LaTeX signature, description)`` rows under "Methods"."""
+        condition = [
+            row for row in super()._display_methods(theta_tex, data_tex)
+            if row[0] == ".condition"
+        ]
         return [
             (
                 ".sample",
@@ -400,6 +270,7 @@ class MeasurementProcess(RichDisplay):
                 r"\mathrm{float}\;|\;\mathrm{jax.Array}",
                 "Compute log likelihood",
             ),
+            *condition,
             (
                 ".PE",
                 rf"({data_tex},\,\pi_{{\mathrm{{PE}}}})"
@@ -413,93 +284,9 @@ class MeasurementProcess(RichDisplay):
             ),
         ]
 
-    def _repr_html_(self):
-        theta_tex = getattr(
-            self.parameter_type, "_latex", r"\theta"
-        )
-        data_tex = getattr(
-            self.data_type, "_latex", "d"
-        )
-
-        likelihood_tex = self._display_density(theta_tex, data_tex)
-
-        display_name = escape(
-            getattr(
-                self, "display_name", type(self).__name__
-            )
-        )
-
-        lines = [
-            '<details' + details_open() + ' style="font-family:inherit;line-height:1.6">',
-            '<summary style="cursor:pointer;padding:0.25em 0">',
-            (
-                '<span style="display:inline-flex;'
-                'align-items:center;gap:0.45em">'
-            ),
-            '<strong>' + display_name + ':</strong>',
-            inline_math(likelihood_tex),
-            '</span></summary>',
-            '<div style="padding:0.45em 0 0.5em 1.3em">',
-        ]
-
-        equations = self._display_equations()
-        if equations:
-            lines.append(
-                '<div style="font-weight:600;margin-bottom:0.35em">Model</div>'
-                + math_block(equations)
-            )
-
-        lines.append(
-            '<div style="font-weight:600;margin:0.5em 0 0.35em 0">Methods</div>'
-        )
-
-        def method(name, signature, description):
-            lines.append(
-                '<div style="display:flex;align-items:center;'
-                'flex-wrap:wrap;gap:0.45em;margin:0.25em 0">'
-                '<code>' + escape(name) + '</code>'
-                + inline_math(signature)
-                + '<span style="opacity:0.7;font-size:0.9em">'
-                + escape(description)
-                + '</span></div>'
-            )
-
-        for row in self._display_methods(theta_tex, data_tex):
-            method(*row)
-
-        config = self._display_config()
-        if config:
-            lines.append(
-                '<div style="border-top:1px solid #8884;'
-                'padding-top:0.45em;margin-top:0.5em">'
-                '<strong>Configuration</strong></div>'
-                + kv_table(config)
-            )
-        elif shown := [f for f in fields(self) if f.name != "key"]:
-            lines.append(
-                '<div style="border-top:1px solid #8884;'
-                'padding-top:0.45em;margin-top:0.5em">'
-                '<strong>Configuration</strong></div>'
-            )
-
-            for f in shown:
-                value = repr(getattr(self, f.name))
-
-                lines.append(
-                    '<div style="margin:0.15em 0">'
-                    '<code>'
-                    + escape(f.name)
-                    + " = "
-                    + escape(value)
-                    + '</code></div>'
-                )
-
-        lines.append("</div></details>")
-        return "".join(lines)
-
 
 @dataclass(eq=False)
-class Proposal(MeasurementProcess):
+class Proposal(ConditionalDistribution):
     """
     Importance-sampling proposal q_Lambda(theta | d): a measurement process
     run backwards.
@@ -520,7 +307,19 @@ class Proposal(MeasurementProcess):
     For common random numbers across Lambda, ``sample_single`` must be a
     smooth function of (key, Lambda): use location-scale transforms, icdf of
     uniforms, or GenerativeModel.sample(key=...), not rejection sampling.
+
+    A Proposal is a ``ConditionalDistribution`` but not a measurement
+    model: the inference methods of ``MeasurementProcess`` raise TypeError.
     """
+
+    _output_symbol = r"\theta"
+    _condition_symbol = "d"
+
+    def _output_type(self):
+        return or_untyped(self.data_type)
+
+    def _condition_type(self):
+        return or_untyped(self.parameter_type)
 
     def sample(self, d, key=None, *, N=None, Lambda=None):
         """Draw theta ~ q_Lambda(theta | d); batch shape d.batch_shape (+ (N,))."""
@@ -554,20 +353,20 @@ class Proposal(MeasurementProcess):
     def posterior_predictive(self, *args, **kwargs):
         raise TypeError("A Proposal is not a measurement model.")
 
-    def _display_density(self, theta_tex, data_tex) -> str:
-        # Here theta_tex is the event data d and data_tex is the drawn theta.
-        return r"q_{\Lambda}\!\left(" + data_tex + r"\mid " + theta_tex + r"\right)"
+    def _display_density(self, d_tex, theta_tex) -> str:
+        # The condition is the event data d; the output is the drawn theta.
+        return r"q_{\Lambda}\!\left(" + theta_tex + r"\mid " + d_tex + r"\right)"
 
-    def _display_methods(self, theta_tex, data_tex):
+    def _display_methods(self, d_tex, theta_tex):
         return [
             (
                 ".sample",
-                rf"({theta_tex},\,\Lambda)\longrightarrow {data_tex}",
+                rf"({d_tex},\,\Lambda)\longrightarrow {theta_tex}",
                 "Draw proposal samples (N= per event)",
             ),
             (
                 ".logpdf",
-                rf"({data_tex},\,{theta_tex},\,\Lambda)"
+                rf"({theta_tex},\,{d_tex},\,\Lambda)"
                 r"\longrightarrow \mathrm{jax.Array}",
                 "Log proposal density",
             ),

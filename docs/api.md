@@ -23,18 +23,40 @@ Methods and properties of every parameter object:
 | `batch_shape`, `is_batched()` | Shape of the batch axes; whether there are any. |
 | `broadcast(batch_shape=None)` | Copy with every field broadcast to the full batch shape. |
 | `reshape_batch(shape)` | Copy with a different batch shape. |
-| `obj[i]`, `obj[mask]`, `obj["field"]` | Select from the batch, or return a field. |
-| `to_dict()`, `cls.from_dict(values)` | Convert to and from a dict or DataFrame. |
+| `obj[i]`, `obj[mask]`, `obj["field"]`, `obj["field.subfield"]` | Select from the batch, or return a field; a dotted path reaches into nested fields. |
+| `to_dict()`, `cls.from_dict(values)` | Convert to and from a dict or DataFrame; nested fields become nested dicts, and `from_dict` also accepts dotted keys. |
+| `to_flat_dict()` | The array fields as a dict keyed by dotted path. |
 | `copy()` | Copy with fresh arrays. |
 | `to_unconstrained(latent=None)`, `cls.from_unconstrained(z, latent=None)` | Map to and from the latent space. |
 | `cls.parameters`, `cls.field_specs()`, `parameter_specs` | Field names and their metadata. |
+| `cls.nested_types()`, `cls.flat_field_specs()` | The nested fields and their types; the metadata of every array field by dotted path. |
+| `cls.distribution(**fields)` | A `StructuredDistribution` over the type, given field by field. |
 | `name`, `latex` | Display name and symbol. |
+
+## Distributions (`astroinfer`)
+
+| name | summary |
+|---|---|
+| `ConditionalDistribution` | Base class for $p(x\mid c)$. Subclasses set `data_type` and `parameter_type` (none, a type, a tuple or a dict) and write `sample_single(*conditions, key)` and `logpdf_single(*data, *conditions)`. |
+| `ConditionalDistribution.sample(*conditions, key=None, N=None, **conditions)` | Batched draws; `N` (an int or a tuple) adds sample axes after the batch axes of the conditions. |
+| `ConditionalDistribution.logpdf(*data, *conditions, outer=False, **conditions)`, `log_prob(...)` | Log density over the batch shapes; a condition with fewer batch axes lines up with the leading data axes. |
+| `ConditionalDistribution.condition(*conditions, **conditions)` | A `BoundConditionalDistribution` with some or all conditions fixed. |
+| `ConditionalDistribution.seed(seed)` | Reset the internal random key. |
+| `BoundConditionalDistribution` | A conditional distribution with fixed conditions; the remaining names of a mapping schema stay conditions. |
+| `StructuredDistribution(data_type, fields, *, parameter_type=None, order=None, check_fixed=True)` | Distribution over a parameter type given field by field; usually made with `cls.distribution(**fields)`. |
+| `StructuredDistribution.given(parameter_type)` | Copy with a condition type, passed to function and conditional fields. |
+| `StructuredDistribution.with_order(paths)`, `order` | Copy with a different draw order; the random fields in draw order. |
+| `StructuredDistribution.random_paths()`, `fixed_paths()` | Dotted paths of the random and the fixed fields. |
+| `conditional(fn, on)` | A field whose NumPyro distribution `fn(x, *conditions)` depends on the fields named in `on`. |
+| `product(*components, **named_components)` | Independent product with a tuple or dict output; returns a `ProductDistribution`. |
+| `mixture(components, weights=None, logits=None, parameter_type=None, *, support=None)` | Mixture over one output type, with fixed or condition-dependent weights; returns a `MixtureDistribution`. |
+| `StructuredDistribution.as_generative(hyperparameter_type=None, external=(), *, conditioned_on=None)` | The distribution on the generative backend, as a `StructuredGenerativePopulation`; also defined on a `MixtureDistribution` of structured distributions. Raises one error listing every field that cannot be converted. |
 
 ## Measurement (`astroinfer`)
 
 | name | summary |
 |---|---|
-| `MeasurementProcess` | Base class for a measurement model $\mathcal{L}(d\mid\theta)$. Subclasses set `parameter_type` and `data_type` and write `sample_single(theta, key)` and `logpdf_single(d, theta)`. |
+| `MeasurementProcess` | Base class for a measurement model $\mathcal{L}(d\mid\theta)$, a `ConditionalDistribution` with inference methods. Subclasses set `parameter_type` and `data_type` and write `sample_single(theta, key)` and `logpdf_single(d, theta)`. |
 | `MeasurementProcess.sample(theta, key=None, *, N=None)` | Draw data for a batch of parameters. |
 | `MeasurementProcess.logpdf(d, theta, *, outer=False)` | $\log \mathcal{L}(d\mid\theta)$, broadcast over the batch shapes. |
 | `MeasurementProcess.seed(seed)` | Reset the internal random key. |
@@ -45,7 +67,18 @@ Methods and properties of every parameter object:
 | `MeasurementProcess.population_inference(data, pop_model, pop_priors, **kwargs)` | Sample the population hyperparameters given a batch of observations, with each source's parameters integrated out. |
 | `MeasurementProcess.joint_population_inference(data, pop_model, pop_priors, **kwargs)` | Sample the hyperparameters and every source's parameters together. |
 | `MeasurementProcess.posterior_predictive(posterior, *, draws=None, key=None)` | Replicated data from posterior draws. |
-| `Proposal` | Base class for an importance-sampling distribution $q_\Lambda(\theta\mid d)$, written like a measurement process with the two types swapped. |
+| `Proposal` | Base class for an importance-sampling distribution $q_\Lambda(\theta\mid d)$, a `ConditionalDistribution` written like a measurement process with the two types swapped. |
+
+## NumPyro models (`astroinfer`)
+
+| name | summary |
+|---|---|
+| `sample(name, distribution, *conditions, obs=None, **conditions)` | Sample sites for one object inside a NumPyro model: one site for a NumPyro distribution, one per random field (`name.<path>`) for a structured distribution, one joint site for any other conditional distribution. Returns the value. |
+| `factor(name, value)` | Add `value` to the model's log density, through `numpyro.factor`. |
+| `infer(model, *args, method="nuts", seed=None, **kwargs)` | Sample the posterior of a model written with `sample` and return a `PosteriorData` with one `theta` field per root; `run_mcmc` settings among `kwargs` go to the runner. |
+| `modeling.unpack(model, samples, *args, **kwargs)` | Typed objects, one per root, from a dict of site draws such as `Predictive` returns. Import from `astroinfer.modeling`. |
+| `inference.runner.run_mcmc(model, *args, method="nuts", seed=None, num_warmup=1000, num_samples=2000, num_chains=1, target_accept_prob=0.7, max_tree_depth=6, summary=True, sampler_kwargs=None, mcmc_kwargs=None, **model_kwargs)` | Run NUTS or, with `method="nested"` (needs `jaxns`), nested sampling on a NumPyro model. Returns a `RunResult`. Import from `astroinfer.inference.runner`. |
+| `inference.runner.RunResult` | The draws of every site (`sites`), the NUTS statistics (`sample_stats`), `sample_dims`, `seed`, the NumPyro `sampler`, and `get_samples(group_by_chain=False)`. |
 
 ## Posteriors (`astroinfer`)
 
@@ -68,10 +101,14 @@ Methods and properties of every parameter object:
 
 | name | summary |
 |---|---|
-| `PopulationModel` | Base class for $\pi(\theta\mid\Lambda)$. Subclasses set `parameter_type` and write `sample_single(Lambda, key)` and `logpdf_single(theta, Lambda)`. |
+| `PopulationModel` | Base class for $\pi(\theta\mid\Lambda)$, a `ConditionalDistribution`. Subclasses set `parameter_type` and write `sample_single(Lambda, key)` and `logpdf_single(theta, Lambda)`. |
 | `PopulationModel.hyperparameter_type` | Optional parameter type for $\Lambda$; the `_single` methods then receive $\Lambda$ as that type. |
-| `PopulationModel.sample(Lambda, key=None, *, shape=())`, `logpdf(theta, Lambda)` | Batched draws and log density; a typed $\Lambda$ with batch axes is mapped over. |
+| `PopulationModel.sample(Lambda, key=None, *, N=None)`, `logpdf(theta, Lambda)` | Batched draws and log density; a typed $\Lambda$ with batch axes is mapped over. `shape=` is a deprecated name for `N`. |
+| `PopulationModel.from_generative(model, parameter_type, *, conditioned_on=None)` | A `GenerativeModel` as a `PopulationModel`. |
 | `PopulationModel.derived_parameters_single(theta, Lambda)` | Optional: quantities of one source under one $\Lambda$, such as mixture membership. |
+| `distributions.transport.StructuredGenerativePopulation` | The `PopulationModel` made by `as_generative`; `order`, `model` (the `GenerativeModel`), `make_seeds(key=None, N=None)`, and `sample(Lambda, key=None, *, N=None, seeds=None)` returning parameter objects. |
+| `distributions.transport.Reparameterizable` | Protocol of a distribution whose draws are a differentiable map of uniform numbers: `base_noise_spec()` and `sample_from_base(noise, *conditions)`. |
+| `population.DistributionPopulation(distribution, parameter_type=None)` | A conditional distribution over $\theta$, with one condition or none, as a `PopulationModel`; it needs a proposal in `PopulationLikelihood` unless the distribution is `Reparameterizable`. Made by `PopulationLikelihood` when it is given such a distribution. |
 
 ## Generative population models (`astroinfer.generative`)
 
@@ -86,6 +123,8 @@ Methods and properties of every parameter object:
 | `product(models)` | Combine models of different variables. |
 | `mixture(models, weights)` | Mixture of models of the same variables, with $K-1$ weight hyperparameters. |
 | `conditional(fn, on)` | A distribution parameter computed from earlier draws and the hyperparameters. |
+| `NumPyroLeaf(var, make_dist, deps=(), bounds=None)` | Leaf for a scalar NumPyro distribution `make_dist(x, L)`; drawn with its inverse CDF when that is differentiable in closed form, otherwise by bisection within `bounds`. |
+| `WeightedMixture(models, weight_fn, deps=(), *, logits=False)` | Mixture whose weights `weight_fn(x, L)` may depend on earlier draws (named in `deps`) and the hyperparameters. |
 | `Distribution` | Base class for a leaf: `cond_cdf`, `cond_pdf`, `bounds`, and optionally `cond_ppf` and `deps`. |
 
 ## Detection (`astroinfer.detection`)

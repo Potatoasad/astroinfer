@@ -5,11 +5,13 @@ Layout (each layer only imports the ones above it):
     display       HTML / LaTeX rendering for notebooks (RichDisplay)
     parameters    @parameter_dataclass: batched JAX pytrees for theta and d
     latent        LatentSpace: per-field bijections to the real line
+    distributions ConditionalDistribution: p(x | c) from unbatched sample/logpdf
     posterior     PosteriorData: posterior draws + sample stats + metadata
     generative    differentiable population models p(theta | Lambda)
-    population    PopulationModel: p(theta | Lambda) from unbatched sample/logpdf
+    population    PopulationModel: the ConditionalDistribution p(theta | Lambda)
     inference     likelihoods and gravpop-backed PE / population sampling
-    measurement   MeasurementProcess: the measurement model L(d | theta)
+    modeling      sample / factor / infer: typed distributions inside NumPyro models
+    measurement   MeasurementProcess: the ConditionalDistribution L(d | theta)
     representations  Fit/Fitter protocol, registry, the built-in raw representation
     catalog       Catalog of per-event posteriors and their representations
     detection     detection triggers P(detected | d) and injection tables
@@ -17,6 +19,16 @@ Layout (each layer only imports the ones above it):
 from . import detection, generative, representations
 from .catalog import Catalog
 from .display import RichDisplay
+from .distributions import (
+    BoundConditionalDistribution,
+    ConditionalDistribution,
+    MixtureDistribution,
+    ProductDistribution,
+    StructuredDistribution,
+    conditional,
+    mixture,
+    product,
+)
 from .latent import LatentSpace
 from .inference import (
     FixedDataLikelihood,
@@ -28,6 +40,7 @@ from .inference import (
     run_sampler,
 )
 from .measurement import MeasurementProcess, Proposal
+from .modeling import factor, infer, sample
 from .parameters import (
     Parameters,
     ParameterSpec,
@@ -41,7 +54,18 @@ from .posterior import PosteriorData
 from .representations import RawFit, RawSamples, register
 
 __all__ = [
+    "factor",
+    "infer",
+    "sample",
+    "MixtureDistribution",
+    "ProductDistribution",
+    "StructuredDistribution",
+    "conditional",
+    "mixture",
+    "product",
+    "BoundConditionalDistribution",
     "Catalog",
+    "ConditionalDistribution",
     "FixedDataLikelihood",
     "JointPopulationLikelihood",
     "LatentSpace",

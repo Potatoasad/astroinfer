@@ -11,6 +11,7 @@ mixture  : components share the SAME variables. ONE component choice governs
            from the same prefix)."""
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 from .base import Distribution
 
@@ -87,6 +88,70 @@ class Mixture(Distribution):
         for m in self.models:
             out += m.deps(var)
         return out
+
+
+class WeightedMixture(Mixture):
+    """A mixture whose weights come from a function of the prefix and L.
+
+    ``weight_fn(x, L)`` returns the K component weights, as an array with
+    the components on the last axis (leading axes broadcast against the
+    sample shape, so weights may vary per draw) or as a list of K arrays.
+    With ``logits=True`` it returns unnormalized log weights instead.
+    ``deps`` names the drawn variables ``weight_fn`` reads; every variable
+    of the mixture is then ordered after them.
+
+    As in ``Mixture``, no component label is drawn: the responsibilities
+    are recomputed from the drawn prefix, so the draws and their gradients
+    with respect to the weights are continuous. ``bounds`` is the union of
+    the components' bounds, and bisection on the mixture CDF needs it to be
+    finite.
+    """
+
+    def __init__(self, models, weight_fn, deps=(), *, logits=False):
+        self.models = models
+        self.weight_fn = weight_fn
+        self.weight_deps = [deps] if isinstance(deps, str) else list(deps)
+        self.logits = bool(logits)
+        self.var_names = list(models[0].var_names)
+
+    def _log_weights(self, x, L):
+        w = self.weight_fn(x, L)
+        if isinstance(w, (list, tuple)):
+            w = jnp.stack(jnp.broadcast_arrays(*w), axis=-1)
+        w = jnp.asarray(w)
+        if w.shape[-1:] != (len(self.models),):
+            raise ValueError(
+                f"weight_fn must return {len(self.models)} weights on the last "
+                f"axis, got shape {w.shape}"
+            )
+        logw = jax.nn.log_softmax(w, axis=-1) if self.logits else jnp.log(w)
+        return [logw[..., k] for k in range(len(self.models))]
+
+    def _log_resp(self, x, L):
+        drawn = [v for v in self.var_names if v in x]
+        lognum = []
+        for lw, m in zip(self._log_weights(x, L), self.models):
+            acc = lw
+            for v in drawn:
+                acc = acc + jnp.log(m.cond_pdf(v, x[v], x, L))
+            lognum.append(acc)
+        stacked = jnp.stack(jnp.broadcast_arrays(*lognum), axis=0)
+        return stacked - jax.scipy.special.logsumexp(stacked, axis=0)
+
+    def cond_ppf(self, var, u, x, L):
+        a, b = self.bounds(var)
+        if not (np.isfinite(a) and np.isfinite(b)):
+            raise ValueError(
+                f"{var}: a mixture is drawn by bisection on its CDF, which "
+                f"needs finite bounds; the components give ({a}, {b})"
+            )
+
+    def bounds(self, var):
+        bounds = [m.bounds(var) for m in self.models]
+        return min(b[0] for b in bounds), max(b[1] for b in bounds)
+
+    def deps(self, var):
+        return self.weight_deps + super().deps(var)
 
 
 def product(models):

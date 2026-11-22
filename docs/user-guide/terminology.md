@@ -46,6 +46,64 @@ The set of values a field may take, given as a numpyro constraint with `support=
 The unconstrained coordinates of a parameter type, in which every field may take any real
 value. `LatentSpace` maps between a parameter type and its latent space, field by field.
 
+### Nested parameter type
+
+A parameter type with a field annotated with another parameter type, such as a `Binary` with
+fields `masses: Masses` and `spins: Spins`. The fields of a nested type are named by their path,
+such as `"masses.m1"`, in indexing, latent spaces and tables of draws.
+
+## Distributions
+
+### Conditional distribution
+
+A distribution $p(x\mid c)$ whose output $x$ and conditions $c$ are parameter objects, written as
+a subclass of `ConditionalDistribution`. Measurement processes, proposals, population models,
+structured distributions, products and mixtures are conditional distributions.
+
+### Schema
+
+The form of the output or condition type of a conditional distribution: none, a single type, a
+tuple of types, or a dict of named types. It decides whether the values are passed positionally
+or as keywords.
+
+### Structured distribution
+
+A distribution over a parameter type given field by field, made with `Type.distribution(...)`.
+Each field holds a NumPyro distribution, a fixed value, a function of the conditions, a
+conditional field, or for a nested field a distribution over the nested type.
+
+### Fixed field
+
+A field of a structured distribution given a value instead of a distribution. It holds that value
+in every draw and adds nothing to the log density.
+
+### Conditional field
+
+A field of a structured distribution whose distribution depends on fields drawn before it, made
+with `ai.conditional(fn, on=...)`. `on` names the paths it reads and fixes the draw order.
+
+### Bound distribution
+
+A conditional distribution with some or all of its conditions fixed, made with `.condition(...)`.
+
+## NumPyro models
+
+### Site
+
+A named random variable of a NumPyro model, created by `numpyro.sample` or `ai.sample`. A site is
+latent when the sampler explores it, and observed when it is given a value with `obs=`.
+
+### Joint site
+
+The single site that `ai.sample` creates for a conditional distribution that is not structured,
+holding a whole object packed into a vector. Its log density is the distribution's `logpdf`.
+
+### Root
+
+The name given to `ai.sample` for a latent object, such as `"bbh"`, or the name of a latent plain
+NumPyro site, such as `"mu_m"`. `ai.infer` gives `theta` one field per root; the sites of a
+structured root, such as `bbh.masses.m1`, all belong to its field.
+
 ## Measurement
 
 ### Measurement process
@@ -101,7 +159,8 @@ columns. `posterior.marginal_prior(["x"])` is the prior density of `x` alone.
 ### Population model
 
 A distribution $\pi(\theta\mid\Lambda)$ describing how parameters are spread over many
-objects. In astroinfer it is a `GenerativeModel`.
+objects. In astroinfer it is a `GenerativeModel`, or a `PopulationModel`, the conditional
+distribution that `PopulationLikelihood` wraps a `GenerativeModel` in.
 
 ### Hyperparameters
 

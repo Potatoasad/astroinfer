@@ -255,6 +255,6 @@ def test_from_generative_logpdf_refuses_conditional_only():
 
 def test_display():
     html = Gaussian()._repr_html_()
-    assert r"\mid\Lambda" in html and ".sample" in html
+    assert r"\pi\!\left(Theta\mid \Lambda\right)" in html and ".sample" in html
     assert "use a proposal" in HardChoice()._repr_html_()
     assert "Order" in PopulationModel.from_generative(pop_model, Theta)._repr_html_()
