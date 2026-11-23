@@ -712,19 +712,20 @@ ax2.legend();
 
 ::::::
 
-::::::{tab-item} Selection effects
+::::::{tab-item} Transit survey
 
 ```{code-cell} python
 :tags: [remove-cell]
 
-run_snippet("star_population")
-run_snippet("star_selection")
+run_snippet("transit_survey")
 ```
 
-The stars of the Star population tab are now seen by a survey that catalogs a star only when its
-measured flux is above a limit. Faint stars far away never reach the catalog, so the catalog is
-brighter than the population it came from. To infer $\Lambda=(\mu_L,\sigma_L)$ from it, the
-model needs one more step after the data, the probability that a measurement is detected:
+A survey watches many stars for 90 days and reports a planet when the combined signal of its
+transits is strong enough. Large planets on short orbits around quiet stars are easy to find;
+small planets on long orbits around noisy stars are missed. From the planets it does find, we
+want the distribution of planet radii, a normal distribution with mean $\mu_R$ and width
+$\sigma_R$. Each system is a star and a planet, so the parameters are a nested parameter type,
+and the population is a distribution over that type:
 
 :::::{div}
 :class: rail
@@ -753,7 +754,13 @@ $\Lambda$
 Hyperparameters $\Lambda$
 :::
 
-The mean $\mu_L$ and width $\sigma_L$ of the distribution of $\log_{10}L$.
+The mean $\mu_R$ and width $\sigma_R$ of the planet radii, in Earth radii.
+
+```{literalinclude} snippets/transit_survey.py
+:start-after: --- hyper
+:end-before: --- population
+:language: python
+```
 
 ::::
 
@@ -785,8 +792,18 @@ $\pi(\theta\mid\Lambda)$
 Population model $\pi(\theta\mid\Lambda)$
 :::
 
-$\log_{10}L$ follows a normal distribution truncated to $[-3, 5]$, and the distance is uniform
-between 0.5 and 2 kpc. This is the `population` of the Star population tab.
+`System.distribution` mirrors the nesting of `System`. Every star has the radius of the Sun, a
+fixed value rather than a random one, and a photometric noise level drawn uniformly. The period
+is uniform between 1 and 30 days, and the first transit falls uniformly within the first
+period, so `t0` is a conditional field that reads `period`. The planet radius is the only
+field that depends on $\Lambda$: a function of the hyperparameters, whose type `.given(Hyper)`
+declares.
+
+```{literalinclude} snippets/transit_survey.py
+:start-after: --- population
+:end-before: --- data
+:language: python
+```
 
 ::::
 
@@ -818,7 +835,14 @@ $\theta$
 Parameters $\theta$
 :::
 
-Each star has a log luminosity and a distance, held in a `Star`.
+A `System` holds a `Star` and a `Planet`. Its fields are reached as `system.planet.radius`, and
+batches, indexing and JAX transformations work through both levels.
+
+```{literalinclude} snippets/transit_survey.py
+:start-after: --- theta
+:end-before: --- hyper
+:language: python
+```
 
 ::::
 
@@ -850,8 +874,17 @@ $\mathcal{L}(d\mid\theta)$
 Measurement process $\mathcal{L}(d\mid\theta)$
 :::
 
-The `Telescope` measures the log flux $\log_{10}L - 2\log_{10}r$ and the parallax $1/r$ with
-Gaussian noise.
+A transit blocks a fraction $(R_p/R_\star)^2$ of the light for 0.2 days. Averaging the
+$n_\mathrm{in}$ exposures taken during transits over the 90 days gives a signal-to-noise ratio
+$\rho = (R_p/R_\star)^2\sqrt{n_\mathrm{in}}/\sigma_\star$, which the search measures with unit
+Gaussian noise. It also reports the period, the time of first transit and the noise level of
+the star, each with a small error.
+
+```{literalinclude} snippets/transit_survey.py
+:start-after: --- measurement
+:end-before: --- trigger
+:language: python
+```
 
 ::::
 
@@ -883,7 +916,13 @@ $d$
 Data $d$
 :::
 
-The measured log flux and parallax of one star, held in a `StarObservation`.
+The measured SNR, period, time of first transit and noise level of one system.
+
+```{literalinclude} snippets/transit_survey.py
+:start-after: --- data
+:end-before: --- measurement
+:language: python
+```
 
 ::::
 
@@ -915,13 +954,11 @@ $P(\mathrm{det}\mid d)$
 Detection trigger $P(\mathrm{det}\mid d)$
 :::
 
-The survey catalogs a star when its measured log flux is above $-0.3$. The trigger reads the
-data, not $\theta$, so noise can push a star over the limit or under it. `ThresholdTrigger` is
-the built-in hard cut on one field of the data.
+A planet enters the catalog when its measured SNR is above 7.
 
-```{literalinclude} snippets/star_selection.py
+```{literalinclude} snippets/transit_survey.py
 :start-after: --- trigger
-:end-before: --- likelihood
+:end-before: --- model
 :language: python
 ```
 
@@ -951,177 +988,464 @@ $\{d_i\}$
 Catalog $\{d_i\}$
 :::
 
-The measurements of the $E$ detected stars. The others are never recorded.
+The measurements of the $E$ detected planets.
 
 ::::
 
 :::::
 
-We draw 1000 stars from the population with $\mu_L = 0$ and $\sigma_L = 0.7$, observe each one
-and ask the trigger which are detected. `trigger.detect` returns a boolean mask, which indexes
-the batch of observations:
+The population is a `StructuredDistribution`. Its display lists the fields in the order they
+are drawn, with the fixed stellar radius and the dependence of $T_0$ on $P$:
 
 ```{code-cell} python
-Lambda_true = {"mu_L": 0.0, "sigma_L": 0.7}
-draws = population.sample(Lambda_true, key=jax.random.key(0), shape=(1000,))
-stars = Star.from_dict(draws)
+population
+```
 
-telescope = Telescope(sigma_log_flux=0.2, sigma_parallax=0.3)
-observed = telescope.sample(stars, key=1)
+We draw 400 systems with $\mu_R = 2$ and $\sigma_R = 0.8$, observe them and keep the
+detections. With `.given(Hyper)`, the hyperparameters are the first argument of `sample`:
+
+```{code-cell} python
+truth = Hyper(mu_R=2.0, sigma_R=0.8)
+systems = population.sample(truth, key=0, N=400)
+
+survey = TransitSurvey()
+observed = survey.sample(systems, key=1)
 detected = trigger.detect(observed, np.random.default_rng(2))
 data = observed[detected]
-data
+int(detected.sum())
 ```
 
-The catalog holds 588 of the 1000 stars. Below the line, where the true flux is under the limit,
-the survey detects only the few stars that noise pushed over it:
+The survey finds 161 of the 400 planets. The detected planets are larger on average,
+2.6 Earth radii against 2.1 for all 400, and few of the small ones on long orbits
+are found:
 
 ```{code-cell} python
-r_grid = jnp.linspace(0.5, 2.0, 100)
-
 fig, ax = plt.subplots(figsize=(6, 3.2), layout="constrained")
-ax.scatter(stars.distance[~detected], stars.log_L[~detected], s=6,
+planets = systems.planet
+ax.scatter(planets.period[~detected], planets.radius[~detected], s=6,
            color="#C9D2DE", label="missed")
-ax.scatter(stars.distance[detected], stars.log_L[detected], s=6,
+ax.scatter(planets.period[detected], planets.radius[detected], s=6,
            color="#418FC5", label="detected")
-ax.plot(r_grid, -0.3 + 2 * jnp.log10(r_grid), color="#17243D",
-        label="flux limit")
-ax.set(xlabel="distance $r$ [kpc]", ylabel=r"$\log_{10}L$",
-       title="True luminosity and distance of 1000 stars")
-ax.legend(loc="lower right");
+ax.set(xlabel="orbital period $P$ [days]", ylabel="planet radius $R_p$ [Earth radii]",
+       title="Period and radius of 400 simulated planets")
+ax.legend(loc="upper right");
 ```
 
-Analysing the catalog as if it held every star, as in the Star population tab, gives the
-population of the detected stars:
+Because the catalog holds only detected planets, each event's likelihood has to be divided by
+the fraction $\alpha(\Lambda)$ of the population that the survey would detect. Here the
+probability of detecting a system follows from its expected SNR,
+$P(\mathrm{det}\mid\theta) = \Phi(\rho(\theta) - 7)$, so $\alpha(\Lambda)$ is the average of that probability over draws
+from the population. `as_generative` converts the population into one that draws from a fixed
+bank of uniform numbers, so the same bank gives draws at every $\Lambda$ and the average is a
+smooth, differentiable function of $\Lambda$:
 
 ```{code-cell} python
-hyper_priors = {"mu_L": dist.Uniform(-2, 2), "sigma_L": dist.Uniform(0.1, 2)}
-naive = telescope.population_inference(data, population, hyper_priors, N=2000,
-                                       seed=0, num_warmup=500,
-                                       num_samples=1000, summary=False)
-naive.summary()
+bank = population.as_generative(hyperparameter_type=Hyper)
+seeds = bank.make_seeds(jax.random.key(5), N=4000)
+
+def alpha(L):
+    draws = bank.sample(L, seeds=seeds)
+    return norm.cdf(survey.snr(draws) - trigger.threshold).mean()
+
+alpha(truth), jax.grad(alpha)(truth)
 ```
 
-It gives $\mu_L = 0.49 \pm 0.02$ and $\sigma_L = 0.46 \pm 0.02$, far from the true values of 0
-and 0.7. Each factor of the likelihood is the evidence $Z_i(\Lambda)$ of one star, but the
-catalog only holds detected stars, so each factor has to be divided by the probability
-$\alpha(\Lambda)$ that a star drawn from the population is detected:
-
-$$
-\mathcal L(\Lambda)=\prod_{i=1}^{E}\frac{Z_i(\Lambda)}{\alpha(\Lambda)},
-\qquad
-\alpha(\Lambda)=\iint P(\mathrm{det}\mid d)\,\mathcal{L}(d\mid\theta)\,\pi(\theta\mid\Lambda)
-\,\mathrm{d}d\,\mathrm{d}\theta .
-$$
-
-We estimate $\alpha(\Lambda)$ with *injections*: draws $\theta_j$ from a broad, fixed
-distribution $g(\theta)$, each simulated once through the telescope and the trigger. Reweighting
-the detected ones gives
-
-$$
-\hat\alpha(\Lambda)=\frac{1}{N_\mathrm{inj}}\sum_{j\in\mathrm{found}}
-\frac{\pi(\theta_j\mid\Lambda)}{g(\theta_j)} .
-$$
-
-Here $g$ is the population with a brighter mean and a larger width. `trigger.injections` takes a
-DataFrame of draws, with $g(\theta_j)$ in a `prior` column, and adds the simulated data and
-whether each draw was detected:
+The survey detects a fraction 0.35 of the population at the true $\Lambda$, and
+`jax.grad` returns the derivatives as a `Hyper`: raising $\mu_R$ by one Earth radius raises
+$\alpha$ by about 0.31. Over a grid of $\mu_R$ the estimate is a smooth curve, because the
+bank does not change:
 
 ```{code-cell} python
-Lambda_g = {"mu_L": 0.5, "sigma_L": 1.5}
-g_draws = population.sample(Lambda_g, key=jax.random.key(3), shape=(50_000,))
-draw_table = pd.DataFrame({k: np.asarray(v) for k, v in g_draws.items()})
-draw_table["prior"] = np.exp(np.asarray(population.log_prob(g_draws, Lambda_g)))
+mu_grid = jnp.linspace(0.5, 4.0, 50)
+alphas = jax.vmap(lambda mu: alpha(Hyper(mu_R=mu, sigma_R=0.8)))(mu_grid)
 
-injections = trigger.injections(telescope, draw_table, np.random.default_rng(4))
-int(injections["detected"].sum())
+fig, ax = plt.subplots(figsize=(5, 3), layout="constrained")
+ax.plot(mu_grid, alphas, color="#418FC5")
+ax.set(xlabel=r"$\mu_R$ [Earth radii]", ylabel=r"$\alpha(\Lambda)$",
+       title=r"Detected fraction against $\mu_R$, with $\sigma_R = 0.8$");
 ```
 
-The selection term goes in a subclass of `PopulationLikelihood`. It keeps the found injections
-and overrides `logpdf` to subtract $E\log\hat\alpha(\Lambda)$ from the sum of the
-$\log\hat Z_i(\Lambda)$:
+The hierarchical model is an ordinary NumPyro model. `ai.sample` draws $\Lambda$ from a
+structured hyperprior and, inside a plate over the catalog, one `System` per planet from the
+population; the observed `ai.sample` adds $\log\mathcal{L}(d_i\mid\theta_i)$; and `ai.factor`
+adds the selection term $-E\log\alpha(\Lambda)$ when a bank is passed:
 
 :::{div}
 :class: landing-code
 
-```{literalinclude} snippets/star_selection.py
-:start-after: --- likelihood
+```{literalinclude} snippets/transit_survey.py
+:start-after: --- model
 :end-before: --- end
 :language: python
 ```
 :::
 
-`population_inference` builds the likelihood from the class passed as `likelihood_cls`, and
-`functools.partial` binds the injections to it:
+`ai.infer` runs NUTS on the model, with and without the selection term:
 
 ```{code-cell} python
-corrected = telescope.population_inference(
-    data, population, hyper_priors, N=2000, seed=0, num_warmup=500,
-    num_samples=1000, summary=False,
-    likelihood_cls=partial(SelectedLikelihood, injections=injections))
-corrected.summary()
+settings = dict(seed=0, num_warmup=500, num_samples=1000, summary=False,
+                mcmc_kwargs={"progress_bar": False})
+corrected = ai.infer(survey_model, data, survey, bank=bank, seeds=seeds,
+                     **settings)
+naive = ai.infer(survey_model, data, survey, **settings)
+corrected.theta
 ```
 
-The corrected posterior gives $\mu_L = -0.09 \pm 0.10$ and $\sigma_L = 0.76 \pm 0.05$, within
-about one standard deviation of the true values. On the left are the posterior samples of
-$\Lambda$ from both analyses. On the right, each line is the population distribution
-$\pi(\log_{10}L\mid\Lambda)$ for one of 50 posterior samples, over the true population:
+`corrected.theta` holds a `Hyper` for $\Lambda$ and a `System` for each detected planet, with
+the planets along a core axis named after the plate. Without the selection term the posterior
+gives $\mu_R = 2.66 \pm 0.05$ and $\sigma_R = 0.59 \pm 0.04$, the population of the detected
+planets. With it, $\mu_R = 1.73 \pm 0.41$ and $\sigma_R = 0.90 \pm 0.16$, within one standard
+deviation of the true 2 and 0.8. On the right, each line is the radius distribution for one of 50 posterior samples:
 
 ```{code-cell} python
-grid = jnp.linspace(-3, 3, 200)
+grid = jnp.linspace(0.5, 6.0, 200)
 
-def population_pdfs(posterior, n=50):
-    hyper = posterior.stack_samples().to_dataframe().sample(n, random_state=0)
-    mu = hyper["mu_L"].to_numpy()[:, None]
-    sigma = hyper["sigma_L"].to_numpy()[:, None]
-    return jnp.exp(dist.TruncatedNormal(mu, sigma, low=-3.0, high=5.0)
-                   .log_prob(grid))
+def radius_pdfs(posterior, n=50):
+    L = posterior.stack_samples().theta.Lambda[:n]
+    return jnp.exp(dist.TruncatedNormal(L.mu_R[:, None], L.sigma_R[:, None],
+                                        low=0.5, high=6.0).log_prob(grid))
 
-true_pdf = jnp.exp(dist.TruncatedNormal(0.0, 0.7, low=-3.0, high=5.0)
-                   .log_prob(grid))
+true_pdf = jnp.exp(dist.TruncatedNormal(2.0, 0.8, low=0.5, high=6.0).log_prob(grid))
 analyses = [("without selection term", naive, "#8592a6"),
             ("with selection term", corrected, "#418FC5")]
 
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(8, 3.2), layout="constrained")
 for label, posterior, color in analyses:
-    samples = posterior.stack_samples().to_dataframe()
-    ax1.scatter(samples["mu_L"], samples["sigma_L"], s=2, alpha=0.2,
-                color=color)
-    ax2.plot(grid, population_pdfs(posterior).T, color=color, alpha=0.15)
+    L = posterior.stack_samples().theta.Lambda
+    ax1.scatter(L.mu_R, L.sigma_R, s=2, alpha=0.2, color=color)
+    ax2.plot(grid, radius_pdfs(posterior).T, color=color, alpha=0.15)
     ax2.plot([], [], color=color, label=label)
-ax1.plot(Lambda_true["mu_L"], Lambda_true["sigma_L"], "x", ms=10, mew=2,
-         color="#E0A348")
-ax1.set(xlabel=r"$\mu_L$", ylabel=r"$\sigma_L$",
+ax1.plot(truth.mu_R, truth.sigma_R, "x", ms=10, mew=2, color="#E0A348")
+ax1.set(xlabel=r"$\mu_R$", ylabel=r"$\sigma_R$",
         title=r"Posterior samples of $\Lambda$")
-ax2.plot(grid, true_pdf, color="#E0A348", lw=2, ls="--",
-         label="true population")
-ax2.set(xlabel=r"$\log_{10}L$", ylabel="density",
-        title="Inferred and true populations")
+ax2.plot(grid, true_pdf, color="#E0A348", lw=2, ls="--", label="true population")
+ax2.set(xlabel=r"planet radius $R_p$ [Earth radii]", ylabel="density",
+        title="Inferred and true radius distributions")
 ax2.legend(fontsize=8);
 ```
 
-The corrected curves agree on the bright side, where the survey sees most stars, and spread
-out on the faint side, which the catalog constrains only through the stars it did not detect.
-[Example 7](examples/07_flux_limited_survey.ipynb) works through this survey in more detail.
+The corrected posterior is wider than the naive one, because the catalog holds few small
+planets and the selection term has to account for the ones it misses.
+[Distributions over parameter types](user-guide/distributions.md) and
+[NumPyro models](user-guide/numpyro-models.md) describe the pieces used here.
 
-:::{dropdown} Definitions from the Star population tab
-```{literalinclude} snippets/star_population.py
-:start-after: --- population
+:::{dropdown} Imports for this example
+```{literalinclude} snippets/transit_survey.py
+:start-after: --- imports
+:end-before: --- theta
+:language: python
+```
+:::
+
+::::::
+
+::::::{tab-item} Spin subpopulations
+
+```{code-cell} python
+:tags: [remove-cell]
+
+run_snippet("spin_population")
+```
+
+Binary black holes may form in two ways: from isolated pairs of stars, which leave small spins
+aligned with the orbit, and through encounters in dense clusters, which leave larger spins in
+random directions. If cluster binaries dominate above some mass, the spin distribution changes
+with the mass of the binary. We model the fraction of cluster binaries as a smooth step in the
+primary mass $m_1$ around a transition mass $m_t$, and infer $m_t$ from noisy measurements:
+
+:::::{div}
+:class: rail
+
+::::{div}
+:class: rail-gut
+
+:::{div}
+:class: dag-node dag-theta
+
+$\Lambda$
+:::
+
+:::{div}
+:class: rail-stem rail-arrow
+:::
+
+::::
+
+::::{div}
+:class: rail-body
+
+:::{div}
+:class: rail-label
+
+Hyperparameters $\Lambda$
+:::
+
+The transition mass $m_t$.
+
+```{literalinclude} snippets/spin_population.py
+:start-after: --- hyper
+:end-before: --- masses
+:language: python
+```
+
+::::
+
+::::{div}
+:class: rail-gut
+
+:::{div}
+:class: rail-stem
+:::
+
+:::{div}
+:class: dag-process
+
+$\pi(m)\,\pi(\chi\mid m,\Lambda)$
+:::
+
+:::{div}
+:class: rail-stem rail-arrow
+:::
+
+::::
+
+::::{div}
+:class: rail-body
+
+:::{div}
+:class: rail-label
+
+Population model $\pi(m)\,\pi(\chi\mid m,\Lambda)$
+:::
+
+The primary mass is uniform between 5 and 80 solar masses. The secondary has at least 5 solar
+masses, so the mass ratio $q$ is uniform between $5/m_1$ and 1, a conditional field that reads
+`m1`:
+
+```{literalinclude} snippets/spin_population.py
+:start-after: --- masses
+:end-before: --- spins
+:language: python
+```
+
+The spins are a mixture of two structured distributions over `Spins`. Its weights are a
+function of the conditions, the masses and $\Lambda$, so the mixture is a distribution of the
+spins conditional on both: the fraction of isotropic spins is
+$\eta(m_1) = 1/(1 + e^{-(m_1 - m_t)/5})$.
+
+```{literalinclude} snippets/spin_population.py
+:start-after: --- spins
+:end-before: --- data
+:language: python
+```
+
+::::
+
+::::{div}
+:class: rail-gut
+
+:::{div}
+:class: rail-stem
+:::
+
+:::{div}
+:class: dag-node
+
+$\theta$
+:::
+
+:::{div}
+:class: rail-stem rail-arrow
+:::
+
+::::
+
+::::{div}
+:class: rail-body
+
+:::{div}
+:class: rail-label
+
+Parameters $\theta$
+:::
+
+A `Binary` holds its `Masses` and its `Spins`.
+
+```{literalinclude} snippets/spin_population.py
+:start-after: --- theta
+:end-before: --- hyper
+:language: python
+```
+
+::::
+
+::::{div}
+:class: rail-gut
+
+:::{div}
+:class: rail-stem
+:::
+
+:::{div}
+:class: dag-process
+
+$\mathcal{L}(d\mid\theta)$
+:::
+
+:::{div}
+:class: rail-stem rail-arrow
+:::
+
+::::
+
+::::{div}
+:class: rail-body
+
+:::{div}
+:class: rail-label
+
+Measurement process $\mathcal{L}(d\mid\theta)$
+:::
+
+A toy detector measures each of the four quantities with Gaussian noise: 10 per cent on $m_1$,
+0.15 on $q$, 0.1 on $\chi$ and 0.3 on $\cos t$.
+
+```{literalinclude} snippets/spin_population.py
+:start-after: --- measurement
+:end-before: --- model
+:language: python
+```
+
+::::
+
+::::{div}
+:class: rail-gut
+
+:::{div}
+:class: rail-stem
+:::
+
+:::{div}
+:class: dag-node
+
+$d$
+:::
+
+::::
+
+::::{div}
+:class: rail-body
+
+:::{div}
+:class: rail-label
+
+Data $d$
+:::
+
+The four measured values of one binary.
+
+```{literalinclude} snippets/spin_population.py
+:start-after: --- data
+:end-before: --- measurement
+:language: python
+```
+
+::::
+
+:::::
+
+The mixture is a conditional distribution with a mapping of conditions, `masses` and `hyper`.
+Its display shows the weights as a function of the conditions and the two components:
+
+```{code-cell} python
+spin_population
+```
+
+We draw 2000 binaries with $m_t = 35$. `.condition` binds the hyperparameters, which leaves a
+distribution of the spins given the masses, and the masses are a batch that `sample` maps
+over:
+
+```{code-cell} python
+truth = Hyper(m_t=35.0)
+masses = mass_prior.sample(key=0, N=2000)
+spins_at_truth = spin_population.condition(hyper=truth)
+spins = spins_at_truth.sample(key=1, masses=masses)
+spins
+```
+
+Below the transition mass most spins are aligned, with $\cos t$ near 1; above it they are
+spread over $[-1, 1]$. The mean of $\cos t$ is 0.87 for binaries below 20 solar masses
+and 0.00 above 60:
+
+```{code-cell} python
+m_grid = jnp.linspace(5, 80, 200)
+
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(8, 3.2), layout="constrained")
+ax1.scatter(masses.m1, spins.cos_tilt, s=3, alpha=0.4, color="#418FC5")
+ax1.set(xlabel="primary mass $m_1$", ylabel=r"$\cos t$",
+        title="Mass and spin tilt of 2000 binaries")
+ax2.plot(m_grid, dynamical_fraction(m_grid, truth.m_t), color="#E0A348", lw=2)
+ax2.set(xlabel="primary mass $m_1$", ylabel=r"$\eta(m_1)$",
+        title="Fraction of isotropic spins");
+```
+
+The detector observes the first 300. `Binary(masses=..., spins=...)` assembles the nested
+objects from the two batches:
+
+```{code-cell} python
+detector = Detector()
+binaries = Binary(masses=masses[:300], spins=spins[:300])
+data = detector.sample(binaries, key=2)
+```
+
+The model draws $m_t$, then, for every event, the masses and the spins given the masses and
+$m_t$, and adds the likelihood of the data. The mixture is one sample site whose density sums
+over the two components, so the component of each binary is never a sampled variable:
+
+:::{div}
+:class: landing-code
+
+```{literalinclude} snippets/spin_population.py
+:start-after: --- model
 :end-before: --- end
 :language: python
 ```
 :::
 
-:::{dropdown} Imports for this example
-```{literalinclude} snippets/star_population.py
-:start-after: --- imports
-:end-before: --- population
-:language: python
+```{code-cell} python
+posterior = ai.infer(spin_model, data, detector, seed=0, num_warmup=500,
+                     num_samples=1000, summary=False,
+                     mcmc_kwargs={"progress_bar": False})
+m_t = posterior.stack_samples().theta.Lambda.m_t
+float(m_t.mean()), float(m_t.std())
 ```
 
-```{literalinclude} snippets/star_selection.py
+The posterior gives $m_t = 33.1 \pm 1.6$, against the true 35. Each line on the right is
+$\eta(m_1)$ for one of 50 posterior samples:
+
+```{code-cell} python
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(8, 3.2), layout="constrained")
+ax1.hist(m_t, bins=40, color="#418FC5")
+ax1.axvline(truth.m_t, color="#E0A348", lw=2)
+ax1.set(xlabel="transition mass $m_t$", ylabel="samples",
+        title="Posterior of $m_t$")
+ax2.plot(m_grid, dynamical_fraction(m_grid[:, None], m_t[:50]), color="#418FC5",
+         alpha=0.15)
+ax2.plot(m_grid, dynamical_fraction(m_grid, truth.m_t), color="#E0A348", lw=2,
+         ls="--", label="true fraction")
+ax2.set(xlabel="primary mass $m_1$", ylabel=r"$\eta(m_1)$",
+        title="Inferred fraction of isotropic spins")
+ax2.legend(fontsize=8);
+```
+
+[Distributions over parameter types](user-guide/distributions.md) covers mixtures and
+conditional fields, and [NumPyro models](user-guide/numpyro-models.md) covers `ai.sample` and
+`ai.infer`.
+
+:::{dropdown} Imports for this example
+```{literalinclude} snippets/spin_population.py
 :start-after: --- imports
-:end-before: --- trigger
+:end-before: --- theta
 :language: python
 ```
 :::

@@ -340,6 +340,11 @@ class StructuredDistribution(ConditionalDistribution):
 
     density_latex = r"\pi"
 
+    def graph(self):
+        """The DAG of the fields: conditions, field dependencies, fixed values."""
+        from ..graph import structured_graph
+        return structured_graph(self)
+
     def __init__(self, data_type, fields, *, parameter_type=None, order=None,
                  check_fixed=True, key=None):
         if not is_parameter_type(data_type):

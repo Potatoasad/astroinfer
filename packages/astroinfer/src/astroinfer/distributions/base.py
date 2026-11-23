@@ -210,6 +210,11 @@ class ConditionalDistribution(RichDisplay):
     _output_symbol = "x"
     _condition_symbol = r"\theta"
 
+    def graph(self):
+        """The DAG of this distribution: its conditions and outputs (see astroinfer.graph)."""
+        from ..graph import distribution_graph
+        return distribution_graph(self)
+
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
         try:
@@ -544,6 +549,11 @@ class BoundConditionalDistribution(ConditionalDistribution):
     parent: Any
     bound: Any = ()
     context: dict = field(default_factory=dict)
+
+    def graph(self):
+        """The parent's DAG, with the bound conditions marked as given."""
+        from ..graph import bound_graph
+        return bound_graph(self)
 
     def __post_init__(self):
         if isinstance(self.bound, dict):

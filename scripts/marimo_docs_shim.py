@@ -208,3 +208,16 @@ class status:
     @staticmethod
     def progress_bar(iterable, **kwargs):
         return iterable
+
+
+def stop(predicate, output=None) -> None:
+    """Show `output` and stop the notebook if `predicate` is true.
+
+    marimo skips the cell and the cells that depend on it. A Jupyter notebook runs from top to
+    bottom, so this raises an error, which ends the execution.
+    """
+    if predicate:
+        if output is not None:
+            _display(output)
+        message = getattr(output, "text", None) or "the cells after this one were not run"
+        raise RuntimeError(f"mo.stop: {message}")

@@ -427,6 +427,35 @@ therefore takes the number of events from the shape of the data, and uses `num_e
 `Predictive`, which does not trace its arguments. To pass static arguments to `ai.infer`, set
 `mcmc_kwargs={"jit_model_args": False}`; the model is then compiled again for every new value.
 
+## Model graphs
+
+`ai.model_graph` draws the graph of a model function. It traces the model once with the
+arguments you pass and uses NumPyro's dependency tracking to find which sites each site depends
+on. Each object drawn with `ai.sample` is one node, labelled with the LaTeX symbol of its type;
+nodes inside a plate carry the plate's index, and the plate is drawn as a group. Observed sites
+are shaded and factors are small filled squares:
+
+```{code-cell} python
+ai.model_graph(hierarchical_model, data)
+```
+
+With `expand=True`, every sample site is a node, grouped by the object it belongs to, so the
+dependencies between fields appear:
+
+```{code-cell} python
+ai.model_graph(hierarchical_model, data, expand=True)
+```
+
+The graph is the same kind of object that `graph()` returns for a distribution (see
+[Distributions over parameter types](distributions.md#graphs)), with the same `nodes`, `edges`,
+`to_svg()` and `to_dot()`.
+
+## Integrating values out
+
+A latent value whose prior and likelihood are conjugate can be integrated out of the model in
+closed form with `ai.sample(name, prior, ..., marginalize=True)`. The sampler then never sees it,
+and `ai.infer` draws it afterwards; see [Integrating values out of a model](marginalization.md).
+
 ## Sampler settings
 
 `ai.infer` and `run_mcmc` take these settings:

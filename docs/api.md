@@ -51,6 +51,7 @@ Methods and properties of every parameter object:
 | `product(*components, **named_components)` | Independent product with a tuple or dict output; returns a `ProductDistribution`. |
 | `mixture(components, weights=None, logits=None, parameter_type=None, *, support=None)` | Mixture over one output type, with fixed or condition-dependent weights; returns a `MixtureDistribution`. |
 | `StructuredDistribution.as_generative(hyperparameter_type=None, external=(), *, conditioned_on=None)` | The distribution on the generative backend, as a `StructuredGenerativePopulation`; also defined on a `MixtureDistribution` of structured distributions. Raises one error listing every field that cannot be converted. |
+| `ConditionalDistribution.graph()` | The distribution as a `Graph`: conditions and outputs, or for a structured distribution its fields, field dependencies and fixed values, or for a mixture its weights and components. Runs nothing. |
 
 ## Measurement (`astroinfer`)
 
@@ -73,12 +74,29 @@ Methods and properties of every parameter object:
 
 | name | summary |
 |---|---|
-| `sample(name, distribution, *conditions, obs=None, **conditions)` | Sample sites for one object inside a NumPyro model: one site for a NumPyro distribution, one per random field (`name.<path>`) for a structured distribution, one joint site for any other conditional distribution. Returns the value. |
+| `sample(name, distribution, *conditions, obs=None, marginalize=False, **conditions)` | Sample sites for one object inside a NumPyro model: one site for a NumPyro distribution, one per random field (`name.<path>`) for a structured distribution, one joint site for any other conditional distribution. Returns the value. With `marginalize=True`, no site: the value is integrated out at the observed site that uses it (see below). |
 | `factor(name, value)` | Add `value` to the model's log density, through `numpyro.factor`. |
 | `infer(model, *args, method="nuts", seed=None, **kwargs)` | Sample the posterior of a model written with `sample` and return a `PosteriorData` with one `theta` field per root; `run_mcmc` settings among `kwargs` go to the runner. |
+| `model_graph(model, *args, expand=False, **kwargs)` | The DAG of a model function as a `Graph`, from one trace: one node per object drawn with `sample` (one per site with `expand=True`), plates as groups, observed sites and factors marked. |
+| `Graph` | Nodes, edges and groups of a DAG; draws itself as SVG in notebooks. `to_svg()`, `to_dot()` (graphviz DOT source), `to_graphviz()` (needs graphviz). |
 | `modeling.unpack(model, samples, *args, **kwargs)` | Typed objects, one per root, from a dict of site draws such as `Predictive` returns. Import from `astroinfer.modeling`. |
 | `inference.runner.run_mcmc(model, *args, method="nuts", seed=None, num_warmup=1000, num_samples=2000, num_chains=1, target_accept_prob=0.7, max_tree_depth=6, summary=True, sampler_kwargs=None, mcmc_kwargs=None, **model_kwargs)` | Run NUTS or, with `method="nested"` (needs `jaxns`), nested sampling on a NumPyro model. Returns a `RunResult`. Import from `astroinfer.inference.runner`. |
 | `inference.runner.RunResult` | The draws of every site (`sites`), the NUTS statistics (`sample_stats`), `sample_dims`, `seed`, the NumPyro `sampler`, and `get_samples(group_by_chain=False)`. |
+
+## Integrating values out (`astroinfer.marginal`)
+
+See [Integrating values out of a model](user-guide/marginalization.md).
+
+| name | description |
+|---|---|
+| `ConjugateFamily` | Base class of a conjugate family: `log_marginal(prior, likelihood)`, `draw(key, prior, likelihood)` (a flat array), and optionally `from_numpyro(distribution)`, each for one element of the value's batch. |
+| `NormalNormal` | A scalar with a Normal prior, `(loc, scale)` or `dist.Normal`, measured with Normal errors, `(observed, error)` or `dist.Normal(observed, error)`. |
+| `GammaPoisson` | A rate with a Gamma prior, `(concentration, rate)` or `dist.Gamma`, measured by Poisson counts, `(counts, exposure)`. |
+| `LinearGaussian` | A vector with a Gaussian prior, `(mean, scale_tril)`, `dist.MultivariateNormal` or `dist.Normal`, and Gaussian data linear in it: a dict with `observed`, `design` (an array or objects of the value's type), `noise_cov` or `noise_scale_tril`, and optionally `offset` and `mask`. |
+| `pair(prior_type, likelihood_type, *, overwrite=False)` | Class decorator registering a rule for one prior class and one likelihood class, with `log_marginal(prior, likelihood, data, prior_conditions, likelihood_conditions)` and `draw(key, ...)`; takes precedence over families. |
+| `drawing()` | Context manager in which observed sites also draw the values they integrate out, as deterministic sites; for `Predictive` outside `infer`. |
+| `ConditionalDistribution.conjugate_likelihood`, `.conjugate_likelihood_single(path, d, *conditions)` | On a likelihood: `{path: family}`, and the likelihood as a function of the value at `path`, in the family's form. |
+| `ConditionalDistribution.conjugate_prior`, `.conjugate_prior_single(*conditions)` | On a prior class: the family, and the prior's description in its form. |
 
 ## Posteriors (`astroinfer`)
 

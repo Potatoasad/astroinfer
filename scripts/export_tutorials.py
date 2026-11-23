@@ -4,7 +4,8 @@
 
 writes docs/examples/<name>.ipynb for every tutorials/<digit>*.py. The notebooks have no
 outputs; Jupyter Book executes them when it builds the site, like every other page. They are
-generated files and are not committed.
+generated files and are not committed. (The gravitational-wave notebooks in docs/examples/gw
+are different: scripts/export_gw_examples.py executes them ahead of time and they are committed.)
 
 Each notebook gets a hidden first cell that installs scripts/marimo_docs_shim.py as `marimo`.
 Cells whose code is hidden in marimo and that only show static text (`mo.md`, `mo.callout`,
@@ -29,16 +30,19 @@ EXERCISE_PLACEHOLDER = "# your code here"
 sys.path.insert(0, str(ROOT / "scripts"))
 import marimo_docs_shim  # noqa: E402
 
-# The notebooks are executed from docs/examples, so paths are relative to it.
+# Jupyter Book executes the tutorials from docs/examples; scripts/export_gw_examples.py executes
+# its notebooks from the repository root. The setup finds the root from either. {notebook_dir} is
+# the folder of the marimo notebook, relative to the root.
 SETUP = """\
 import sys
 from pathlib import Path
 
-ROOT = Path("../..").resolve()
-sys.path[:0] = [str(ROOT / "tutorials"), str(ROOT / "scripts")]
+ROOT = next(path for path in [Path.cwd(), *Path.cwd().parents]
+            if (path / "scripts" / "marimo_docs_shim.py").is_file())
+sys.path[:0] = [str(ROOT / "{notebook_dir}"), str(ROOT / "scripts")]
 
 import marimo_docs_shim
-marimo_docs_shim.set_notebook_dir(ROOT / "tutorials")
+marimo_docs_shim.set_notebook_dir(ROOT / "{notebook_dir}")
 sys.modules["marimo"] = marimo_docs_shim
 
 # marimo shows a figure only when a cell returns it. Stop Jupyter from also showing every
@@ -78,8 +82,16 @@ def static_markdown(source: str) -> str | None:
     return value.text if isinstance(value, marimo_docs_shim._Markdown) else None
 
 
-def convert(notebook: dict, path: Path) -> dict:
+def convert(notebook: dict, path: Path, prefix: str | None = None,
+            frontmatter: str | None = None) -> dict:
+    """Turn marimo's export of `path` into the notebook shown in the docs.
+
+    `prefix` starts every cell id (the first two characters of the file name by default), and
+    `frontmatter`, if given, is YAML that goes at the top of the first cell as the page's MyST
+    frontmatter.
+    """
     relative = path.relative_to(ROOT).as_posix()
+    prefix = path.stem[:2] if prefix is None else prefix
     note = (f"This page was generated from [`{relative}`]({REPOSITORY}/{relative}), a marimo "
             "notebook. Sliders and other controls are shown at their default values. To change "
             f"them, run the notebook with `uv run marimo edit {relative}`.")
@@ -87,7 +99,7 @@ def convert(notebook: dict, path: Path) -> dict:
     cells = []
     for cell in notebook["cells"]:
         # marimo's cell ids repeat across notebooks, and Jupyter Book needs them to be unique.
-        cell["id"] = f"{path.stem[:2]}-{cell.get('id', len(cells))}"
+        cell["id"] = f"{prefix}-{cell.get('id', len(cells))}"
         source = "".join(cell["source"])
         hidden = cell["metadata"].get("marimo", {}).get("config", {}).get("hide_code", False)
         if cell["cell_type"] == "code" and hidden:
@@ -105,10 +117,13 @@ def convert(notebook: dict, path: Path) -> dict:
     first = next(c for c in cells if c["cell_type"] == "markdown")
     title, _, rest = "".join(first["source"]).partition("\n")
     first["source"] = f"{title}\n\n{note}\n{rest}"
+    if frontmatter:
+        first["source"] = f"---\n{frontmatter.strip()}\n---\n{first['source']}"
     setup = [c for c in cells if c["metadata"].get("marimo", {}).get("name") == "setup"]
     for cell in setup:
         cells.remove(cell)
-    docs_setup = code_cell(SETUP, ["remove-cell"], f"{path.stem[:2]}-docs-setup")
+    setup_code = SETUP.format(notebook_dir=path.parent.relative_to(ROOT).as_posix())
+    docs_setup = code_cell(setup_code, ["remove-cell"], f"{prefix}-docs-setup")
     cells.remove(first)
     cells = [first, docs_setup, *setup, *cells]
 
@@ -118,25 +133,30 @@ def convert(notebook: dict, path: Path) -> dict:
     return notebook
 
 
+def export(path: Path) -> dict:
+    """The marimo notebook at `path` as a Jupyter notebook (a dict), without outputs."""
+    with tempfile.TemporaryDirectory() as tmp:
+        exported = Path(tmp) / "notebook.ipynb"
+        subprocess.run([sys.executable, "-m", "marimo", "export", "ipynb", str(path),
+                        "-o", str(exported), "--sort", "top-down", "-f"],
+                       check=True, capture_output=True)
+        return json.loads(exported.read_text())
+
+
 def main() -> None:
     OUTPUT.mkdir(parents=True, exist_ok=True)
     marimo_docs_shim.set_notebook_dir(TUTORIALS)
     tutorials = sorted(TUTORIALS.glob("[0-9]*.py"))
-    # Remove notebooks of tutorials that were renamed or deleted.
+    # Remove notebooks of tutorials that were renamed or deleted. The glob is not recursive, so
+    # the pre-executed notebooks in docs/examples/gw (scripts/export_gw_examples.py) are kept.
     for old in OUTPUT.glob("*.ipynb"):
         if old.stem not in {path.stem for path in tutorials}:
             old.unlink()
     if (TUTORIALS / "images").is_dir():
         shutil.copytree(TUTORIALS / "images", OUTPUT / "images", dirs_exist_ok=True)
     for path in tutorials:
-        with tempfile.TemporaryDirectory() as tmp:
-            exported = Path(tmp) / "notebook.ipynb"
-            subprocess.run([sys.executable, "-m", "marimo", "export", "ipynb", str(path),
-                            "-o", str(exported), "--sort", "top-down", "-f"],
-                           check=True, capture_output=True)
-            notebook = json.loads(exported.read_text())
         target = OUTPUT / f"{path.stem}.ipynb"
-        target.write_text(json.dumps(convert(notebook, path), indent=1) + "\n")
+        target.write_text(json.dumps(convert(export(path), path), indent=1) + "\n")
         print("wrote", target.relative_to(ROOT))
 
 
