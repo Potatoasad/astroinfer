@@ -30,6 +30,10 @@ The fixed fields of a latent structured object are recorded as
 ``numpyro.deterministic("name.path", value)``, so the object can be rebuilt
 from the samples (``unpack``, ``infer``).
 
+With ``marginalize=True``, ``sample`` creates no site; the value is integrated out of the
+model in closed form at the observed site that uses it (see ``astroinfer.marginal``), and
+``infer`` draws it back after sampling.
+
 A latent joint site needs a support for every leaf. In order of
 precedence, a leaf's support comes from a ``support`` attribute on the
 distribution (a dict from dotted path to constraint, or one constraint for
@@ -51,6 +55,7 @@ from jax.flatten_util import ravel_pytree
 from numpyro import handlers
 from numpyro.distributions import Distribution, constraints
 
+from . import marginal as _marginal
 from .distributions.base import (
     BoundConditionalDistribution,
     ConditionalDistribution,
@@ -191,6 +196,30 @@ def _layout(distribution, conds, context):
     )
     template = jax.tree_util.tree_map(lambda s: jnp.zeros(s.shape[nb:], s.dtype), out)
     return JointLayout.from_template(template)
+
+
+def _layout_of(distribution, obs):
+    """The layout of one realization, read off observed data; None if they are untyped.
+
+    An observed site needs no ``sample_single``: the data already have the shape of a
+    realization.
+    """
+    schema = distribution._output_schema()
+    values = _output_values(schema, obs)
+    if not values or not all(isinstance(v, Parameters) for v in values):
+        return None
+    elems = []
+    for v in values:
+        b = v.batch_shape
+        v = v.broadcast()
+        elems.append(v[(0,) * len(b)] if b else v)
+    if schema.kind == "single":
+        template = elems[0]
+    elif schema.kind == "mapping":
+        template = dict(zip(schema.names, elems))
+    else:
+        template = tuple(elems)
+    return JointLayout.from_template(jax.tree_util.tree_map(jnp.zeros_like, template))
 
 
 def _output_values(schema, x):
@@ -451,7 +480,7 @@ def _structured_leaf(d, path, x, conds, lead, cores):
 # sample and factor
 # ============================================================
 
-def sample(name, distribution, *args, obs=None, **conditions):
+def sample(name, distribution, *args, obs=None, marginalize=False, **conditions):
     """
     Create the NumPyro sample site(s) for ``distribution`` and return the value.
 
@@ -469,13 +498,25 @@ def sample(name, distribution, *args, obs=None, **conditions):
         Observed value. The site is then an observed site, whose density
         is the distribution's ``logpdf`` at ``obs``.
 
+    marginalize:
+        Integrate the value out of the model in closed form instead of
+        sampling it. No site is created; the returned value is a stand-in
+        filled with NaN, to be passed to the observed site whose likelihood
+        is conjugate to this prior (see ``astroinfer.marginal``). ``infer``
+        draws the value after sampling.
+
     A latent joint site needs a support for every leaf (see the module
     docstring); leaves must be continuous. The sites carry metadata under
     ``site["infer"]["astroinfer"]``.
     """
+    if marginalize:
+        if obs is not None:
+            raise TypeError(f"{name}: an observed site cannot be marginalized")
+        return _marginal.begin(name, distribution, args, conditions)
     if isinstance(distribution, Distribution):
         if args or conditions:
             raise TypeError("A NumPyro distribution takes no conditions")
+        _marginal.check_unused(name, distribution)
         return numpyro.sample(
             name, distribution, obs=obs, infer=_meta(name, "numpyro")
         )
@@ -490,6 +531,8 @@ def sample(name, distribution, *args, obs=None, **conditions):
             f"{name}: got {len(rest)} extra positional argument(s); the key "
             "comes from NumPyro"
         )
+    if _marginal.stand_ins((values, context)):
+        return _marginal.consume(name, distribution, values, context, obs)
     conds = tuple(distribution._coerce_conditions(values))
     return _dispatch(name, distribution, conds, context, obs, name, None, None)[0]
 
@@ -559,13 +602,16 @@ def _sample_joint(name, distribution, conds, context, obs, root, path, root_type
             f"{name}: {type(distribution).__name__} declares no output type "
             "(data_type); use typing.Any for an untyped output"
         )
-    layout = _layout(distribution, conds, context)
+    if obs is not None:
+        obs = _coerce_output(distribution, obs)
+    layout = (obs is not None and _layout_of(distribution, obs)) or _layout(
+        distribution, conds, context
+    )
     meta = _meta(
         root, "joint", root_type or distribution._output_type(), path, layout=layout
     )
     core = tuple(len(s) for s in layout.shapes)
     if obs is not None:
-        obs = _coerce_output(distribution, obs)
         site = _JointSite(distribution, conds, context, layout)
         numpyro.sample(name, site, obs=layout.pack(obs), infer=meta)
         return obs, core
@@ -598,6 +644,7 @@ class _Root:
     axes: tuple      # names of the per-draw batch axes of the object
     sites: tuple     # names of the sites read
     parts: dict      # "parts" roots: {path: (site name, layout or None)}
+    marginalized: bool = False   # integrated out; drawn after sampling
 
 
 def _batch_axis_names(name, site, batch_shape):
@@ -636,7 +683,9 @@ def _part_sites(root, type_, parts):
 
 
 def _trace(model, args, kwargs):
-    return handlers.trace(handlers.seed(model, rng_seed=0)).get_trace(*args, **kwargs)
+    # Drawing mode, so that marginalized values appear as roots of the trace.
+    with _marginal.drawing():
+        return handlers.trace(handlers.seed(model, rng_seed=0)).get_trace(*args, **kwargs)
 
 
 def _roots(trace):
@@ -644,6 +693,11 @@ def _roots(trace):
     roots, deterministic, first = {}, [], {}
     for name, site in trace.items():
         if site["type"] == "deterministic":
+            meta = (site.get("infer") or {}).get(META)
+            if meta is not None and meta.get("kind") == "marginalized":
+                roots[name] = _Root(name, meta["root_kind"], meta["type"], meta["layout"],
+                                    tuple(meta["axes"]), (name,), {}, marginalized=True)
+                continue
             deterministic.append(name)
             continue
         if site["type"] != "sample" or site["is_observed"]:
@@ -733,6 +787,22 @@ def _theta_field(name, out_type, value, axes, n_sample):
     return value, tuple(axes) + tuple(f"{name}_dim_{i}" for i in range(len(axes), len(axes) + extra))
 
 
+def _draw_marginalized(model, args, kwargs, result, names):
+    """``result.sites`` with a draw of every marginalized value per posterior draw."""
+    from numpyro.infer import Predictive
+
+    n = len(result.sample_dims)
+    lead = next(iter(result.sites.values())).shape[:n]
+    key = jax.random.PRNGKey((result.seed or 0) + 1)
+    with _marginal.drawing():
+        drawn = Predictive(model, posterior_samples=result.get_samples(),
+                           return_sites=list(names))(key, *args, **kwargs)
+    sites = dict(result.sites)
+    for name in names:
+        sites[name] = jnp.reshape(drawn[name], lead + jnp.shape(drawn[name])[1:])
+    return sites
+
+
 def infer(model, *args, method="nuts", seed=None, **kwargs):
     """
     Sample the posterior of a NumPyro model written with ``sample``.
@@ -751,6 +821,10 @@ def infer(model, *args, method="nuts", seed=None, **kwargs):
     sampler statistics such as ``log_likelihood``), the NUTS extra fields
     to ``sample_stats``; observed sites are left out. The ``RunResult`` is
     kept as ``posterior.metadata["run"]``.
+
+    A value sampled with ``marginalize=True`` is not seen by the sampler.
+    After the run it is drawn from its distribution given the data, once
+    per posterior draw, and is a field of theta like any other root.
     """
     settings = {k: kwargs.pop(k) for k in list(kwargs) if k in _RUN_SETTINGS}
     roots, deterministic = _roots(_trace(model, args, kwargs))
@@ -765,9 +839,12 @@ def infer(model, *args, method="nuts", seed=None, **kwargs):
 
     result = run_mcmc(model, *args, method=method, seed=seed, **settings, **kwargs)
     n = len(result.sample_dims)
+    marginalized = [name for name, root in roots.items() if root.marginalized]
+    sites = _draw_marginalized(model, args, kwargs, result, marginalized) if marginalized \
+        else result.sites
     values, dims = {}, {}
     for name, root in roots.items():
-        value = _root_value(root, result.sites)
+        value = _root_value(root, sites)
         values[name], d = _theta_field(name, root.type, value, root.axes, n)
         if d is not None:
             dims[name] = d
@@ -790,6 +867,7 @@ def infer(model, *args, method="nuts", seed=None, **kwargs):
             "method": result.method,
             "seed": result.seed,
             "num_samples": int(prod(theta.batch_shape)),
+            "marginalized": tuple(marginalized),
             "run": result,
         },
         sample_dims=result.sample_dims,

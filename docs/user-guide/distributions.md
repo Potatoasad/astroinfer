@@ -628,6 +628,34 @@ Pass `parameter_type=` to give the conditions types, for example
 `parameter_type={"masses": Masses, "alpha": float}`, so that a dict of masses is converted to
 `Masses`. It must name every condition of the components.
 
+## Graphs
+
+`graph()` draws a distribution as a directed acyclic graph. It reads the definition of the
+distribution and runs nothing. For a structured distribution, each field is a node, grouped by
+nested type; a conditional field has an edge from every field in its `on` list, a field written
+as a function of the conditions has an edge from the condition node, and a fixed field is drawn
+dashed with its value:
+
+```{code-cell} python
+mass_dependent_spins.graph()
+```
+
+```{code-cell} python
+population.graph()
+```
+
+A mixture shows its weights, its components and the conditions the weights read:
+
+```{code-cell} python
+spins_by_mass.graph()
+```
+
+Other distributions show their conditions pointing to their output, $\theta\to d$ for a
+measurement process. A graph has `nodes`, `edges` and `groups` attributes, `to_svg()` returns
+the drawing as a string, and `to_dot()` returns graphviz DOT source; `to_graphviz()` needs the
+graphviz package. Labels are drawn as plain text, so LaTeX in a label is shown with Unicode
+symbols and subscripts.
+
 ## Products of densities over the same object
 
 `ai.product` multiplies distributions over different objects. A product of two densities over the

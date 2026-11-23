@@ -17,6 +17,13 @@ dev = [
     "pytest>=8",
     "ruff",
 ]
+# For notebooks/gw/06_ringdown_real_noise.py and 07_gw150914_ringdown.py, which fetch open
+# LIGO-Virgo data and condition it with ringdown, for example
+# uv run --group ringdown marimo edit notebooks/gw/07_gw150914_ringdown.py
+ringdown = [
+    "gwpy",
+    "ringdown",
+]
 
 [tool.uv]
 package = false
@@ -33,6 +40,8 @@ astroinfer-gw = { workspace = true }
 # see docs/installation.md for what that means for users.
 truncatedgaussianmixtures = { git = "https://github.com/Potatoasad/truncatedgaussianmixtures", rev = "jax-backend" }
 plot-helper = { git = "https://github.com/Potatoasad/plot_helper" }
+# ringdown's latest release pins numpy 1.26 and numpyro 0.19; its main branch works with ours.
+ringdown = { git = "https://github.com/maxisi/ringdown", rev = "757bcc7ee2d31c589dc12c16b01e025a403de215" }
 
 [tool.pytest.ini_options]
 testpaths = [

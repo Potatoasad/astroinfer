@@ -26,3 +26,23 @@ run a notebook with marimo from the repository root:
 uv sync
 uv run marimo edit tutorials/01_coin_flips.py
 ```
+
+## Gravitational waves
+
+These notebooks, in
+[`notebooks/gw/`](https://github.com/Potatoasad/astroinfer/tree/main/notebooks/gw), apply
+astroinfer to mock gravitational-wave catalogs, using the measurement process in
+`astroinfer_gw.gwmockcat` and the population distributions in `astroinfer_gw.populations`.
+Notebook 1 runs parameter estimation for every detected event and notebook 3 runs population
+inference, both of which take a long time, so unlike the examples above these notebooks are
+executed ahead of time and the pages show their stored outputs. Notebook 2 also needs Julia. They
+assume you have worked through the examples above.
+
+| # | example | topics |
+|---|---|---|
+| 1 | [A mock gravitational-wave catalog](examples/gw/01_gw_mock_catalog.ipynb) | the measurement process and detection trigger, a population as a structured distribution over `GWParams`, PE, the raw data product, injections |
+| 2 | [Fitting the GW catalog with TGMMs](examples/gw/02_gw_tgmm_fitting.ipynb) | TGMM configurations, per-event overrides and stale fits, padded data products, transformed coordinates, saving and loading |
+| 3 | [Population inference with an event-informed proposal](examples/gw/03_proposal_population.ipynb) | `as_generative`, an event-informed `Proposal`, the selection term, `ai.infer` with the Monte Carlo population likelihood and with a joint NumPyro model |
+
+They run with marimo in the same way, for example
+`uv run marimo edit notebooks/gw/01_gw_mock_catalog.py`.

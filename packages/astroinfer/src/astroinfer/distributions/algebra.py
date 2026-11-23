@@ -284,6 +284,11 @@ class ProductDistribution(ConditionalDistribution):
 
     display_name = "Product"
 
+    def graph(self):
+        """The DAG of the product: conditions -> each component."""
+        from ..graph import product_graph
+        return product_graph(self)
+
     def __post_init__(self):
         named = isinstance(self.components, Mapping)
         self.components = dict(self.components) if named else tuple(self.components)
@@ -435,6 +440,11 @@ class MixtureDistribution(ConditionalDistribution):
     support: Any = None
 
     display_name = "Mixture"
+
+    def graph(self):
+        """The DAG of the mixture: conditions -> weights, components -> output."""
+        from ..graph import mixture_graph
+        return mixture_graph(self)
 
     def __post_init__(self):
         self.components = tuple(self.components)

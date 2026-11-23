@@ -32,6 +32,11 @@ project:
         - file: examples/08_sharper_telescopes.ipynb
         - file: examples/09_star_catalog.ipynb
         - file: examples/10_your_own_representation.ipynb
+        - title: Gravitational waves
+          children:
+            - file: examples/gw/01_gw_mock_catalog.ipynb
+            - file: examples/gw/02_gw_tgmm_fitting.ipynb
+            - file: examples/gw/03_proposal_population.ipynb
     - title: User guide
       children:
         - file: user-guide/terminology.md
@@ -39,11 +44,13 @@ project:
         - file: user-guide/measurement-processes.md
         - file: user-guide/distributions.md
         - file: user-guide/numpyro-models.md
+        - file: user-guide/marginalization.md
         - file: user-guide/population-models.md
         - file: user-guide/population-inference.md
         - file: user-guide/catalogs.md
     - title: Explanation and reference
       children:
+        - file: map.md
         - file: how-it-works.md
         - file: sharp-bits.md
         - file: api.md

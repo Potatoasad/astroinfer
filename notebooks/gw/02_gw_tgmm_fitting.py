@@ -247,10 +247,9 @@ def _(catalog):
         warnings.simplefilter("always")
         _fitted = catalog.fit("spins", errors="warn")
     spin_failures = catalog.missing("spins") + catalog.stale("spins")
-    mo.md(f"""
-    Fitted {len(_fitted)} events. These events failed, because every retry put a component
-    outside the box: `{spin_failures}`
-    """)
+    mo.md(f"Fitted {len(_fitted)} events. "
+          + (f"These events failed, because every retry put a component outside the box: "
+             f"`{spin_failures}`" if spin_failures else "No event failed."))
     return (spin_failures,)
 
 
@@ -258,9 +257,9 @@ def _(catalog):
 def _():
     mo.md(r"""
     Spin posteriors pile up against the edges of $[0, 1]$, and with $K = 4$ the fitter can put a
-    component almost entirely outside the box. For the events listed above, every retry with a new
-    seed did the same, so `catalog.fit(..., errors="warn")` reported them and fitted the others.
-    Overriding those events to use fewer components fixes them, and only those events are refit.
+    component almost entirely outside the box. When every retry with a new seed does the same,
+    `catalog.fit(..., errors="warn")` reports the event and fits the others. Overriding the events
+    that failed to use fewer components fixes them, and only those events are refit.
     """)
     return
 

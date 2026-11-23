@@ -11,14 +11,16 @@ Layout (each layer only imports the ones above it):
     population    PopulationModel: the ConditionalDistribution p(theta | Lambda)
     inference     likelihoods and gravpop-backed PE / population sampling
     modeling      sample / factor / infer: typed distributions inside NumPyro models
+    marginal      integrating values out in closed form: families and pair rules
     measurement   MeasurementProcess: the ConditionalDistribution L(d | theta)
     representations  Fit/Fitter protocol, registry, the built-in raw representation
     catalog       Catalog of per-event posteriors and their representations
     detection     detection triggers P(detected | d) and injection tables
 """
-from . import detection, generative, representations
+from . import detection, generative, marginal, representations
 from .catalog import Catalog
 from .display import RichDisplay
+from .graph import Graph, model_graph
 from .distributions import (
     BoundConditionalDistribution,
     ConditionalDistribution,
@@ -54,6 +56,8 @@ from .posterior import PosteriorData
 from .representations import RawFit, RawSamples, register
 
 __all__ = [
+    "Graph",
+    "model_graph",
     "factor",
     "infer",
     "sample",
