@@ -43,7 +43,7 @@ def _():
     | 5 | the coin mint | population models with `astroinfer.generative` |
     | 6 | auditing the mint | hierarchical inference with `PopulationLikelihood` |
     | 7 | a flux-limited survey | detection triggers and selection effects |
-    | 8 | sharper telescopes | importance sampling with a `Proposal` |
+    | 8 | sharper telescopes | a NumPyro model with `ai.sample` and `ai.infer`; importance sampling with a `Proposal` |
     | 9 | the star catalog | `Catalog`, data products, save / load |
     | 10 | your own representation | the `Fit` / `Fitter` protocol |
 

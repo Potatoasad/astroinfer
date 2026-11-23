@@ -37,6 +37,11 @@ project:
             - file: examples/gw/01_gw_mock_catalog.ipynb
             - file: examples/gw/02_gw_tgmm_fitting.ipynb
             - file: examples/gw/03_proposal_population.ipynb
+            - file: examples/gw/04_ringdown_damped_sinusoid.ipynb
+            - file: examples/gw/05_ringdown_kerr.ipynb
+            - file: examples/gw/06_ringdown_real_noise.ipynb
+            - file: examples/gw/07_gw150914_ringdown.ipynb
+            - file: examples/gw/08_ringdown_marginalized.ipynb
     - title: User guide
       children:
         - file: user-guide/terminology.md

@@ -15,10 +15,13 @@ with app.setup:
     import marimo as mo
     import matplotlib.pyplot as plt
     import numpy as np
+    import numpyro
     import numpyro.distributions as dist
     import pandas as pd
+    from jax.scipy.special import logsumexp, ndtr
     from jax.scipy.stats import norm, truncnorm
     from numpyro.distributions import constraints
+    from numpyro.infer import init_to_value
 
     import astroinfer as ai
     from astroinfer import MeasurementProcess, parameter, parameter_dataclass
@@ -28,10 +31,11 @@ with app.setup:
 
     style.apply()
 
-    R_MIN, R_MAX = 0.5, 2.0   # the survey volume: a shell from 0.5 to 2 kpc
-    N_SIM = 5_000             # stars simulated in the volume
-    N_EVENTS = 150            # detected stars used in the analysis
-    N_INJ = 50_000            # injections for the selection term
+    R_MIN, R_MAX = 0.5, 2.0       # the survey volume: a shell from 0.5 to 2 kpc
+    LOG_L_MIN, LOG_L_MAX = -3.0, 5.0
+    N_SIM = 5_000                 # stars simulated in the volume
+    N_EVENTS = 150                # detected stars used in the analysis
+    N_INJ = 50_000                # injections for the selection term
 
 
 @app.cell(hide_code=True)
@@ -40,11 +44,16 @@ def _():
     # 8. Sharper telescopes
 
     The observatory has a new telescope that measures fluxes and parallaxes ten times more
-    precisely than the one in notebook 7. You would expect better data to give a better answer,
-    but with the per-star integrals computed the way we have done so far, the analysis of notebook
-    6 fails on the sharper data. This notebook shows why, and fixes it with a `Proposal`, an
-    importance-sampling distribution that draws each star's parameters close to where its data put
-    them.
+    precisely than the one in notebook 7. In notebooks 6 and 7, each star's parameters were
+    integrated out by `PopulationLikelihood`, which averages the likelihood over draws from the
+    population. With data this sharp, that average stops working.
+
+    This notebook analyses the sharper survey in two ways. The first writes the hierarchical model
+    as a NumPyro model function, with `ai.sample` and `ai.infer`: the sampler explores every star's
+    distance, and each star's luminosity is integrated out exactly, with no average over draws at
+    all. The second returns to `PopulationLikelihood`, shows why its average fails on sharp data,
+    and fixes it with a `Proposal`, an importance-sampling distribution that draws each star's
+    parameters close to where its data put them.
     """)
     return
 
@@ -138,32 +147,10 @@ class Telescope(MeasurementProcess):
         ]
 
 
-@app.class_definition
-class SelectedLikelihood(ai.PopulationLikelihood):
-    """Population likelihood with the selection term -E log alpha(Lambda) from found injections."""
-
-    def __init__(self, *a, injections, log_g, n_injections, **kw):
-        super().__init__(*a, **kw)
-        self.injections, self.log_g, self.n_injections = injections, log_g, n_injections
-
-    def log_alpha(self, Lambda):
-        log_r = self.pop_model.log_prob(self.injections, Lambda) - self.log_g
-        return jax.scipy.special.logsumexp(log_r) - jnp.log(self.n_injections)
-
-    def logpdf(self, Lambda):
-        return super().logpdf(Lambda) - self.E * self.log_alpha(Lambda)
-
-    def selection_neff(self, Lambda):
-        """Effective number of injections behind alpha-hat (want >> 4 E)."""
-        log_r = self.pop_model.log_prob(self.injections, Lambda) - self.log_g
-        return jnp.exp(2 * jax.scipy.special.logsumexp(log_r)
-                       - jax.scipy.special.logsumexp(2 * log_r))
-
-
 @app.cell
 def _():
     # The population, assembled from two named leaves so we can reuse them later.
-    luminosity = TruncatedNormal("log_L", "mu_L", "sigma_L", -3.0, 5.0)
+    luminosity = TruncatedNormal("log_L", "mu_L", "sigma_L", LOG_L_MIN, LOG_L_MAX)
     volume = PowerLaw("distance", 2.0, R_MIN, R_MAX)
     pop_model = GenerativeModel(product([luminosity, volume]), order=["log_L", "distance"])
     Lambda_true = dict(mu_L=0.0, sigma_L=0.7)
@@ -195,8 +182,338 @@ def _(Lambda_true, blurry, pop_model, sharp, trigger):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## Per-star integrals with sharp data
+    The selection term is that of notebook 7: injections drawn from a broad population $g$,
+    simulated through the sharp telescope, and reweighted to estimate the detected fraction,
+    $\hat\alpha(\Lambda) = \frac{1}{N_\mathrm{inj}}\sum_{j\in\text{found}}
+    p(\theta_j\mid\Lambda)/g(\theta_j)$. Both analyses below use this function:
+    """)
+    return
 
+
+@app.cell
+def _(pop_model, sharp, trigger):
+    Lambda_g = dict(mu_L=0.5, sigma_L=1.5)
+    _g_draws = pop_model.sample(Lambda_g, key=jax.random.key(5), shape=(N_INJ,))
+    _g_table = pd.DataFrame({k: np.asarray(v) for k, v in _g_draws.items()})
+    _g_table["prior"] = np.exp(np.asarray(pop_model.log_prob(_g_draws, Lambda_g)))
+
+    _inj = trigger.injections(sharp, _g_table, np.random.default_rng(6))
+    _found = _inj[_inj.detected]
+    selection = dict(
+        injections={k: jnp.asarray(_found[k].to_numpy()) for k in ["log_L", "distance"]},
+        log_g=jnp.log(jnp.asarray(_found["prior"].to_numpy())),
+        n_injections=N_INJ,
+    )
+
+    def log_alpha(Lambda):
+        """log of the detected fraction, from the found injections."""
+        log_r = pop_model.log_prob(selection["injections"], Lambda) - selection["log_g"]
+        return logsumexp(log_r) - jnp.log(N_INJ)
+
+    hyper_priors = dict(mu_L=dist.Uniform(-2.0, 2.0), sigma_L=dist.Uniform(0.1, 2.0))
+    mo.md(f"{len(_found):,} of {N_INJ:,} injections are found.")
+    return hyper_priors, log_alpha, selection
+
+
+@app.cell(hide_code=True)
+def _():
+    mo.md(r"""
+    ---
+    ## The survey as a NumPyro model
+
+    The hierarchical model of the survey has three layers: the hyperparameters
+    $\Lambda = (\mu_L, \sigma_L)$, each star's parameters $\theta_i = (\log_{10}L_i, r_i)$, and each
+    star's data $d_i$. In a NumPyro model each layer is an `ai.sample` site, and NUTS explores them
+    together. Nothing is averaged over population draws, so the sharpness of the data causes no
+    trouble.
+
+    The model needs the hyperparameters as a parameter type, and the luminosity on its own, because
+    it is the part we will integrate out:
+    """)
+    return
+
+
+@app.class_definition
+@parameter_dataclass(name="Hyperparameters", latex=r"\Lambda")
+class Hyper:
+    mu_L: float = parameter(name="Mean log luminosity", latex=r"\mu_L")
+    sigma_L: float = parameter(name="Spread of log luminosity", latex=r"\sigma_L",
+                               support=constraints.positive)
+
+
+@app.class_definition
+@parameter_dataclass(name="Luminosity", latex=r"\log_{10}L")
+class Luminosity:
+    log_L: float = parameter(name="Log luminosity", latex=r"\log_{10}L")
+
+
+@app.cell(hide_code=True)
+def _():
+    mo.md(r"""
+    The population is the one above, written as distributions that can stand at `ai.sample`
+    sites. The luminosity population is a conditional distribution of the luminosity given
+    $\Lambda$. The distances, uniform in volume with $p(r)\propto r^2$, are a small NumPyro
+    distribution, which declares the shell $[0.5, 2]$ kpc as its support so that NUTS never
+    proposes a distance outside it:
+    """)
+    return
+
+
+@app.class_definition
+class LuminosityPopulation(ai.ConditionalDistribution):
+    data_type = Luminosity
+    parameter_type = Hyper
+    display_name = "Luminosity population"
+
+    def law(self, hyper):
+        return dist.TruncatedNormal(hyper.mu_L, hyper.sigma_L, low=LOG_L_MIN, high=LOG_L_MAX)
+
+    def sample_single(self, hyper, key):
+        return Luminosity(log_L=self.law(hyper).sample(key))
+
+    def logpdf_single(self, lum, hyper):
+        return self.law(hyper).log_prob(lum.log_L)
+
+
+@app.class_definition
+class UniformInVolume(dist.Distribution):
+    """p(r) = 3 r^2 / (r_max^3 - r_min^3) on [R_MIN, R_MAX]."""
+
+    arg_constraints = {}
+    support = constraints.interval(R_MIN, R_MAX)
+
+    def __init__(self):
+        super().__init__(batch_shape=(), event_shape=())
+
+    def sample(self, key, sample_shape=()):
+        u = jax.random.uniform(key, tuple(sample_shape) + self.batch_shape)
+        return (R_MIN**3 + u * (R_MAX**3 - R_MIN**3)) ** (1 / 3)
+
+    def log_prob(self, r):
+        return jnp.log(3 * r**2 / (R_MAX**3 - R_MIN**3))
+
+
+@app.cell(hide_code=True)
+def _():
+    mo.md(r"""
+    ### Integrating out the luminosity
+
+    Given its distance, a star's measured log flux is Gaussian around $\log_{10}L - 2\log_{10}r$,
+    with the telescope's error $\sigma_F$. Writing $y = \log_{10}\hat F + 2\log_{10}r$, the flux
+    term is $\mathcal N(y;\ \log_{10}L,\ \sigma_F)$, and the luminosity's population is a truncated
+    normal $\mathcal{TN}(\mu_L, \sigma_L)$ on $[a, b] = [-3, 5]$. Their product integrates in closed
+    form:
+
+    $$
+    \int_a^b \mathcal{TN}(x;\ \mu_L, \sigma_L)\ \mathcal N(y;\ x, \sigma_F)\,dx
+    = \mathcal N\!\left(y;\ \mu_L, \sqrt{\sigma_L^2 + \sigma_F^2}\right)
+      \frac{\Phi\!\left(\frac{b - m}{s}\right) - \Phi\!\left(\frac{a - m}{s}\right)}
+           {\Phi\!\left(\frac{b - \mu_L}{\sigma_L}\right) - \Phi\!\left(\frac{a - \mu_L}{\sigma_L}\right)},
+    $$
+
+    with $s^2 = \sigma_L^2\sigma_F^2/(\sigma_L^2 + \sigma_F^2)$ and
+    $m = s^2(\mu_L/\sigma_L^2 + y/\sigma_F^2)$. Given the data, the luminosity is
+    $\mathcal{TN}(m, s)$ on $[a, b]$. Integrating it out leaves the sampler one parameter per star
+    instead of two, and the luminosities can be drawn afterwards from that distribution.
+
+    `ai.sample(..., marginalize=True)` does this, given a rule for the integral (see
+    [Integrating values out of a model](../user-guide/marginalization.md)). The truncation means
+    the rule is not one of the built-in conjugate families, so we write a *pair rule* for the two
+    classes involved, `LuminosityPopulation` and `Telescope`. It has two methods: the log of the
+    integral, and one draw of the luminosity given the data. The rule replaces the whole observed
+    site, so it also adds the parallax term, which does not involve the luminosity:
+    """)
+    return
+
+
+@app.class_definition
+@ai.marginal.pair(LuminosityPopulation, Telescope)
+class TruncatedLuminosityFlux:
+    """A truncated normal population of log L, observed through the flux with Gaussian noise."""
+
+    def _terms(self, hyper, telescope, d, star):
+        y = d.log_flux + 2 * jnp.log10(star.distance)
+        sF, mu, sL = telescope.sigma_log_flux, hyper.mu_L, hyper.sigma_L
+        s2 = sL**2 * sF**2 / (sL**2 + sF**2)
+        m = s2 * (mu / sL**2 + y / sF**2)
+        return y, mu, sL, sF, m, jnp.sqrt(s2)
+
+    def log_marginal(self, prior, likelihood, data, prior_conditions, likelihood_conditions):
+        y, mu, sL, sF, m, s = self._terms(prior_conditions, likelihood, data, likelihood_conditions)
+        a, b = LOG_L_MIN, LOG_L_MAX
+        flux = (dist.Normal(mu, jnp.sqrt(sL**2 + sF**2)).log_prob(y)
+                + jnp.log(ndtr((b - m) / s) - ndtr((a - m) / s))
+                - jnp.log(ndtr((b - mu) / sL) - ndtr((a - mu) / sL)))
+        parallax = dist.Normal(1.0 / likelihood_conditions.distance,
+                               likelihood.sigma_parallax).log_prob(data.parallax)
+        return flux + parallax
+
+    def draw(self, key, prior, likelihood, data, prior_conditions, likelihood_conditions):
+        *_, m, s = self._terms(prior_conditions, likelihood, data, likelihood_conditions)
+        z = jax.random.truncated_normal(key, (LOG_L_MIN - m) / s, (LOG_L_MAX - m) / s)
+        return Luminosity(log_L=m + s * z)
+
+
+@app.cell(hide_code=True)
+def _():
+    mo.md(r"""
+    ### The model
+
+    The model function has one line per distribution. With `marginalize=True` the luminosity is
+    integrated out at the observed site `d` by the pair rule; with `marginalize=False`, NUTS samples
+    it like the distances. The selection term divides the likelihood by $\hat\alpha(\Lambda)^E$,
+    which `ai.factor` adds as $-E\log\hat\alpha(\Lambda)$:
+    """)
+    return
+
+
+@app.cell
+def _(log_alpha, sharp):
+    luminosity_population = LuminosityPopulation()
+    distances = UniformInVolume()
+
+    def survey_model(marginalize):
+        def model(data):
+            hyper = Hyper(mu_L=ai.sample("mu_L", dist.Uniform(-2.0, 2.0)),
+                          sigma_L=ai.sample("sigma_L", dist.Uniform(0.1, 2.0)))
+            with numpyro.plate("stars", data.batch_shape[0]):
+                distance = ai.sample("distance", distances)
+                luminosity = ai.sample("luminosity", luminosity_population, hyper,
+                                       marginalize=marginalize)
+                ai.sample("d", sharp, Star(log_L=luminosity.log_L, distance=distance), obs=data)
+            Lambda = {"mu_L": hyper.mu_L, "sigma_L": hyper.sigma_L}
+            ai.factor("selection", -data.batch_shape[0] * log_alpha(Lambda))
+        return model
+
+    return distances, luminosity_population, survey_model
+
+
+@app.cell
+def _(data, survey_model):
+    ai.model_graph(survey_model(True), data)
+    return
+
+
+@app.cell(hide_code=True)
+def _():
+    mo.md(r"""
+    A check of the pair rule before sampling: at the true $\Lambda$ and the true distances, the
+    model's log density should equal the same terms with every star's luminosity integrated out by
+    brute force, on a fine grid. The two numbers:
+    """)
+    return
+
+
+@app.cell
+def _(Lambda_true, data, detected_truths, distances, log_alpha, sharp, survey_model):
+    from numpyro import handlers
+    from numpyro.infer.util import log_density
+
+    _params = {**Lambda_true, "distance": detected_truths.distance}
+    with handlers.block():
+        _model_value = float(log_density(survey_model(True), (data,), {}, _params)[0])
+
+    _grid = jnp.linspace(LOG_L_MIN, LOG_L_MAX, 200_001)
+    _prior = dist.TruncatedNormal(Lambda_true["mu_L"], Lambda_true["sigma_L"],
+                                  low=LOG_L_MIN, high=LOG_L_MAX).log_prob(_grid)
+
+    def _one(d, r):
+        return (logsumexp(_prior + sharp.logpdf(d, Star(log_L=_grid, distance=r)))
+                + jnp.log(_grid[1] - _grid[0]))
+
+    _brute = (float(dist.Uniform(-2.0, 2.0).log_prob(Lambda_true["mu_L"])
+                    + dist.Uniform(0.1, 2.0).log_prob(Lambda_true["sigma_L"]))
+              + float(jnp.sum(distances.log_prob(detected_truths.distance)))
+              + float(jnp.sum(jax.vmap(_one)(data, detected_truths.distance)))
+              - N_EVENTS * float(log_alpha(Lambda_true)))
+    _model_value, _brute
+    return
+
+
+@app.cell(hide_code=True)
+def _():
+    mo.md(r"""
+    The two agree to about $10^{-9}$, so the pair rule computes the integral the model describes,
+    truncation included.
+
+    ### Sampling
+
+    `ai.infer` runs NUTS on both versions of the model. Both start each star at the distance and
+    luminosity its data point to, $r = 1/\hat\varpi$ and $\log_{10}L = \log_{10}\hat F +
+    2\log_{10}r$, through NumPyro's `init_to_value`; the marginalized model has no luminosity site
+    and uses only the distances.
+    """)
+    return
+
+
+@app.cell
+def _(data, survey_model):
+    _r0 = jnp.clip(1.0 / data.parallax, R_MIN + 0.01, R_MAX - 0.01)
+    _start_at_data = init_to_value(values={
+        "distance": _r0,
+        "luminosity": (data.log_flux + 2 * jnp.log10(_r0))[:, None],
+    })
+    _settings = dict(seed=0, num_warmup=1000, num_samples=2000, summary=False,
+                     sampler_kwargs={"init_strategy": _start_at_data},
+                     mcmc_kwargs={"progress_bar": False})
+    numpyro_runs = {
+        "luminosity sampled": ai.infer(survey_model(False), data, **_settings),
+        "luminosity integrated out": ai.infer(survey_model(True), data, **_settings),
+    }
+
+    def _row(posterior):
+        table = posterior.summary(["mu_L", "sigma_L"])
+        return {"mu_L": f"{table.loc['mu_L', 'mean']:.3f} ± {table.loc['mu_L', 'sd']:.3f}",
+                "sigma_L": f"{table.loc['sigma_L', 'mean']:.3f} ± {table.loc['sigma_L', 'sd']:.3f}",
+                "ESS mu_L": round(table.loc["mu_L", "ess"]),
+                "ESS sigma_L": round(table.loc["sigma_L", "ess"]),
+                "divergences": int(posterior.sample_stats["diverging"].sum())}
+
+    pd.DataFrame({name: _row(p) for name, p in numpyro_runs.items()}).T
+    return (numpyro_runs,)
+
+
+@app.cell(hide_code=True)
+def _():
+    mo.md(r"""
+    The two runs agree, and both recover the truth, $(\mu_L, \sigma_L) = (0, 0.7)$: the posterior of
+    $\mu_L$ is $-0.01 \pm 0.25$ with the luminosities sampled and $0.01 \pm 0.24$ with them integrated
+    out, and that of $\sigma_L$ is $0.73 \pm 0.10$ in both. Neither run has divergent transitions.
+    Integrating out the luminosities gains little here, slightly larger effective sample sizes,
+    because the sharp data pin each luminosity and NUTS samples them easily; it matters more when
+    the integrated values are poorly measured, as for the stars of a cluster in
+    [Integrating values out of a model](../user-guide/marginalization.md).
+
+    The luminosities are in the posterior either way. In the marginalized run, `ai.infer` draws each
+    star's $\log_{10}L$ from $\mathcal{TN}(m, s)$ after sampling, using the distance and $\Lambda$ of
+    every posterior draw. The residuals from the true luminosities, in units of each star's
+    posterior standard deviation:
+    """)
+    return
+
+
+@app.cell
+def _(detected_truths, numpyro_runs):
+    _rows = {}
+    for _name, _p in numpyro_runs.items():
+        _log_L = np.asarray(_p.theta.luminosity.log_L).reshape(-1, N_EVENTS)
+        _z = (_log_L.mean(0) - np.asarray(detected_truths.log_L)) / _log_L.std(0)
+        _rows[_name] = {"mean residual": _z.mean(), "spread of residuals": _z.std(),
+                        "median posterior sd of log L": float(np.median(_log_L.std(0)))}
+    pd.DataFrame(_rows).T.round(3)
+    return
+
+
+@app.cell(hide_code=True)
+def _():
+    mo.md(r"""
+    In both runs the residuals have a mean near 0 (0.07) and a spread near 1 (1.02), so each star's
+    luminosity is recovered within its posterior width of about 0.03 dex.
+
+    ---
+    ## Per-star integrals over population draws
+
+    The analysis of notebooks 6 and 7 integrates each star's parameters out by Monte Carlo instead.
     For star $i$, `PopulationLikelihood` computes
 
     $$
@@ -240,35 +557,37 @@ def _(Lambda_true, data, data_blurry, blurry, pop_model, sharp):
     return N_POP, neff_sharp, neff_per_star
 
 
+@app.class_definition
+class SelectedLikelihood(ai.PopulationLikelihood):
+    """Population likelihood with the selection term -E log alpha(Lambda) from found injections."""
+
+    def __init__(self, *a, injections, log_g, n_injections, **kw):
+        super().__init__(*a, **kw)
+        self.injections, self.log_g, self.n_injections = injections, log_g, n_injections
+
+    def log_alpha(self, Lambda):
+        log_r = self.pop_model.log_prob(self.injections, Lambda) - self.log_g
+        return jax.scipy.special.logsumexp(log_r) - jnp.log(self.n_injections)
+
+    def logpdf(self, Lambda):
+        return super().logpdf(Lambda) - self.E * self.log_alpha(Lambda)
+
+    def selection_neff(self, Lambda):
+        """Effective number of injections behind alpha-hat (want >> 4 E)."""
+        log_r = self.pop_model.log_prob(self.injections, Lambda) - self.log_g
+        return jnp.exp(2 * jax.scipy.special.logsumexp(log_r)
+                       - jax.scipy.special.logsumexp(2 * log_r))
+
+
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
     With only a handful of effective draws per star, $\log\hat Z_i(\Lambda)$ is dominated by
     noise. The noise also biases the result, because populations that happen to put their darts
-    near the data look better than they are. To see the effect, we run the notebook 7 analysis
-    anyway, starting with the injections for the selection term, simulated through the sharp
-    telescope:
+    near the data look better than they are. To see the effect, we run the notebook 7 analysis on
+    the sharp data anyway, with the same selection term as the NumPyro model:
     """)
     return
-
-
-@app.cell
-def _(pop_model, sharp, trigger):
-    Lambda_g = dict(mu_L=0.5, sigma_L=1.5)
-    _g_draws = pop_model.sample(Lambda_g, key=jax.random.key(5), shape=(N_INJ,))
-    _g_table = pd.DataFrame({k: np.asarray(v) for k, v in _g_draws.items()})
-    _g_table["prior"] = np.exp(np.asarray(pop_model.log_prob(_g_draws, Lambda_g)))
-
-    _inj = trigger.injections(sharp, _g_table, np.random.default_rng(6))
-    _found = _inj[_inj.detected]
-    selection = dict(
-        injections={k: jnp.asarray(_found[k].to_numpy()) for k in ["log_L", "distance"]},
-        log_g=jnp.log(jnp.asarray(_found["prior"].to_numpy())),
-        n_injections=N_INJ,
-    )
-    hyper_priors = dict(mu_L=dist.Uniform(-2.0, 2.0), sigma_L=dist.Uniform(0.1, 2.0))
-    mo.md(f"{len(_found):,} of {N_INJ:,} injections are found.")
-    return hyper_priors, selection
 
 
 @app.cell
@@ -284,9 +603,10 @@ def _(N_POP, data, hyper_priors, pop_model, selection, sharp):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    The truth is $(\mu_L,\sigma_L)=(0,\,0.7)$, and the posterior is narrow and far from it. A
-    population run with a low $N_\mathrm{eff}$ can look confident and still be wrong, so check
-    $N_\mathrm{eff}$ before trusting the result.
+    The truth is $(\mu_L,\sigma_L)=(0,\,0.7)$, and this posterior, $\mu_L = 0.97 \pm 0.02$ and
+    $\sigma_L = 1.72 \pm 0.04$, is narrow and far from it. A population run with a low
+    $N_\mathrm{eff}$ can look confident and still be wrong, so check $N_\mathrm{eff}$ before trusting
+    the result.
 
     ## Importance sampling with a proposal
 
@@ -295,7 +615,7 @@ def _():
 
     $$
     \hat Z_i(\Lambda)=\frac1N\sum_{j=1}^{N}
-    \underbrace{\frac{K(d_i\mid\theta_{ij})\,p(\theta_{ij}\mid\Lambda)}{q(\theta_{ij}\mid d_i)}}_{w_{ij}},
+    \underbrace{\frac{\mathcal{L}(d_i\mid\theta_{ij})\,p(\theta_{ij}\mid\Lambda)}{q(\theta_{ij}\mid d_i)}}_{w_{ij}},
     \qquad \theta_{ij}\sim q(\cdot\mid d_i).
     $$
 
@@ -479,8 +799,6 @@ def _(N_POP, Lambda_true, data, neff_per_star, neff_sharp, pop_model, proposal, 
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## Inference with the proposal and the selection term
-
     `measurement.population_inference` takes the proposal through `proposal=` and a custom
     likelihood class through `likelihood_cls=`. Because it builds the likelihood itself, extra
     constructor arguments (here, the injections) are bound with `functools.partial`:
@@ -500,14 +818,27 @@ def _(N_Q, data, hyper_priors, pop_model, proposal, selection, sharp):
     return (fixed,)
 
 
+@app.cell(hide_code=True)
+def _():
+    mo.md(r"""
+    ## The three analyses together
+
+    The posterior of the hyperparameters from the population draws alone, from the proposal, and
+    from the NumPyro model with the luminosities integrated out:
+    """)
+    return
+
+
 @app.cell
-def _(Lambda_true, fixed, starved):
+def _(Lambda_true, fixed, numpyro_runs, starved):
+    _numpyro = numpyro_runs["luminosity integrated out"]
+    _numpyro_draws = {"mu_L": np.ravel(_numpyro.theta.mu_L), "sigma_L": np.ravel(_numpyro.theta.sigma_L)}
     _fig, _ = style.corner(
-        [starved, fixed], ["mu_L", "sigma_L"],
+        [starved, fixed, _numpyro_draws], ["mu_L", "sigma_L"],
         labels=[r"$\mu_L$", r"$\sigma_L$"],
-        names=["population draws", "proposal"],
-        colors=[style.PRIOR, style.POSTERIOR],
-        truths=Lambda_true, ranges={"mu_L": (-1.0, 1.3), "sigma_L": (0.3, 2.0)},
+        names=["population draws", "proposal", "NumPyro model"],
+        colors=[style.PRIOR, style.POSTERIOR, style.EXTRA],
+        truths=Lambda_true,
         size=2.6,
     )
     _fig
@@ -517,15 +848,19 @@ def _(Lambda_true, fixed, starved):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    With the proposal the truth is back inside the posterior. Writing the proposal takes a few
-    dozen lines, and after that every population run is both cheaper ($N=500$) and correct.
+    The proposal and the NumPyro model agree with each other and with the truth: $\mu_L = 0.00 \pm
+    0.22$ and $0.01 \pm 0.24$, and $\sigma_L = 0.73 \pm 0.10$ in both. They reach the same answer by
+    different means. The proposal makes each star's Monte Carlo integral accurate. The NumPyro model
+    has no such integral: the sampler explores each star's distance, and the luminosity is integrated
+    out exactly. Both share the selection term, which is itself a Monte Carlo estimate from
+    injections and needs enough found injections at every $\Lambda$ the sampler visits.
 
     ## Overriding the weights
 
-    Everything above used the default weight, implemented in
+    Everything above that used `PopulationLikelihood` used the default weight, implemented in
     `PopulationLikelihood.log_weights(Lambda)`. It returns an `(E, N)` array:
 
-    * no proposal: $\log w = \log K$, with $\theta\sim p(\cdot\mid\Lambda)$;
+    * no proposal: $\log w = \log \mathcal{L}$, with $\theta\sim p(\cdot\mid\Lambda)$;
     * with a proposal: $\log w = \log \mathcal{L} + \log p(\theta\mid\Lambda) - \log q(\theta\mid d)$, with $\theta\sim q$.
 
     Sometimes you know something the default does not. A common case is drawing some of the
@@ -533,8 +868,8 @@ def _():
     that factor appears in both $p$ and $q$ and cancels:
 
     $$
-    w = \frac{K\;p(\log_{10}L\mid\Lambda)\,p(r)}{q(r\mid d)\;p(\log_{10}L\mid\Lambda)}
-      = \frac{K\;p(r)}{q(r\mid d)} .
+    w = \frac{\mathcal{L}\;p(\log_{10}L\mid\Lambda)\,p(r)}{q(r\mid d)\;p(\log_{10}L\mid\Lambda)}
+      = \frac{\mathcal{L}\;p(r)}{q(r\mid d)} .
     $$
 
     Overriding `log_weights` lets you compute this reduced weight directly. Below,
@@ -618,15 +953,21 @@ def _():
     mo.md(r"""
     ## Summary
 
-    * Integrals over population draws break down when the data are much narrower than the
-      population. A few effective draws per event give confident, wrong answers, so check the
-      per-event $N_\mathrm{eff}$.
+    * A hierarchical model written as a NumPyro model function, with `ai.sample` sites for the
+      hyperparameters, each star's parameters and each star's data, has no Monte Carlo integral over
+      the stars' parameters, and so no trouble with sharp data. `ai.infer` samples it with NUTS.
+    * A value whose prior and likelihood combine in closed form can be integrated out with
+      `ai.sample(..., marginalize=True)`. A pair rule, `@ai.marginal.pair(PriorClass,
+      LikelihoodClass)` with `log_marginal` and `draw`, supplies the integral when no built-in
+      family fits, as for the truncated luminosity population here.
+    * Extra terms in the log density, such as the selection term, go in with `ai.factor`.
+    * Integrals over population draws, as in `PopulationLikelihood`, break down when the data are
+      much narrower than the population. A few effective draws per event give confident, wrong
+      answers, so check the per-event $N_\mathrm{eff}$.
     * A `Proposal` is a measurement process run backwards: `parameter_type` is the data class and
-      `data_type` is the parameter class. Its draws must be smooth in `(key, Lambda)`.
-    * The proposal goes in with `proposal=` and a custom likelihood with `likelihood_cls=`, with
-      extra arguments bound by `functools.partial`.
-    * To change the weight, for example when a factor shared by $p$ and $q$ cancels, override
-      `log_weights(Lambda)`.
+      `data_type` is the parameter class. Its draws must be smooth in `(key, Lambda)`. It goes in
+      with `proposal=`, and a custom likelihood with `likelihood_cls=`, with extra arguments bound
+      by `functools.partial`. To change the weight, override `log_weights(Lambda)`.
 
     So far every analysis has started from the raw data $d_i$. Notebook 9 starts instead from what
     real catalogs publish, the posterior samples of each event, collected in a `Catalog`.

@@ -15,7 +15,7 @@ The notebooks assume you know Bayesian inference, but not JAX or astroinfer.
 | 5 | `05_coin_mint.py` | the coin mint | population models with `astroinfer.generative`, writing your own leaf |
 | 6 | `06_auditing_the_mint.py` | auditing the mint | hierarchical inference with `PopulationLikelihood` |
 | 7 | `07_flux_limited_survey.py` | a flux-limited survey | `DetectionTrigger`, injections, selection effects |
-| 8 | `08_sharper_telescopes.py` | sharper telescopes | importance sampling with a `Proposal` |
+| 8 | `08_sharper_telescopes.py` | sharper telescopes | a NumPyro model with `ai.sample` / `ai.infer`, `marginalize=True` with a pair rule, importance sampling with a `Proposal` |
 | 9 | `09_star_catalog.py` | the star catalog | `Catalog`, `RawSamples`, data products, save / load |
 | 10 | `10_your_own_representation.py` | your own representation | the `Fit` / `Fitter` protocol |
 

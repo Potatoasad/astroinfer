@@ -540,8 +540,9 @@ def _():
     * Extra likelihood terms go in a subclass of `PopulationLikelihood` that overrides `logpdf`,
       run with `ai.run_sampler`. Check both the per-event and the selection $N_\mathrm{eff}$.
 
-    In notebook 8 the telescope gets much sharper, and the population-draw integrals stop working
-    until we add a `Proposal`.
+    In notebook 8 the telescope gets much sharper. We write the analysis as a NumPyro model, which
+    needs no integrals over population draws, and see why those integrals stop working in
+    `PopulationLikelihood` until we add a `Proposal`.
     """)
     return
 
